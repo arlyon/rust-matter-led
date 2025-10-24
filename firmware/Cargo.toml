@@ -80,7 +80,7 @@ static_cell      = "2.1.1"
 
 # rs-matter = { version = "0.1.1", git = "https://github.com/project-chip/rs-matter.git", default-features = false }
 rs-matter = { path = "../../rs-matter/rs-matter", default-features = false }
-rs-matter-embassy = { path = "../../rs-matter-embassy/rs-matter-embassy", features = [ "embassy-net"] }
+rs-matter-embassy = { path = "../../rs-matter-embassy/rs-matter-embassy", features = [ "embassy-net", "esp"] }
 rs-matter-stack = { path = "../../rs-matter-stack" }
 defmt-rtt = "1.1.0"
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
