@@ -473,6 +473,25 @@
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
+      },
+      {
+        "diff_pair_gap": 2.0,
+        "diff_pair_width": 2.0,
+        "name": "10A",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 10.0,
+        "via_diameter": 3.0,
+        "via_drill": 3.0
+      },
+      {
+        "clearance": 0.2,
+        "name": "2.4A",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 1,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 2.0
       }
     ],
     "meta": {
@@ -480,7 +499,16 @@
     },
     "net_colors": null,
     "netclass_assignments": null,
-    "netclass_patterns": []
+    "netclass_patterns": [
+      {
+        "netclass": "2.4A",
+        "pattern": "*24"
+      },
+      {
+        "netclass": "10A",
+        "pattern": "+24V"
+      }
+    ]
   },
   "pcbnew": {
     "last_paths": {
@@ -560,12 +588,24 @@
           "label": "Datasheet",
           "name": "Datasheet",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
         }
       ],
       "filter_string": "",
       "group_symbols": true,
       "include_excluded_from_bom": true,
-      "name": "Default Editing",
+      "name": "",
       "sort_asc": true,
       "sort_field": "Reference"
     },
