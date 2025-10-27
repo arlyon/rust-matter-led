@@ -2,3 +2,5 @@
 "cargo:esp-generate" = "latest"
 rust = {version = "nightly", target = "riscv32imac-unknown-none-elf"}
 "cargo:https://github.com/olback/library-loader" = { version = "branch:master", crate = "library-loader-cli" }
+"cargo:espflash" = "latest"
+"cargo:cargo-espflash" = "latest"

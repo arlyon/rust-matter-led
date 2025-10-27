@@ -14,6 +14,7 @@ use embassy_sync::mutex::Mutex;
 use esp_alloc::heap_allocator;
 use rs_matter::{
     dm::{Cluster, clusters::on_off::HandlerAsyncAdaptor},
+    pairing::{DiscoveryCapabilities, qr::QrTextType},
     with,
 };
 
@@ -28,8 +29,8 @@ use esp_hal::{
     timer::timg::TimerGroup,
 };
 
-use defmt::info;
-use defmt_rtt as _;
+use esp_backtrace as _;
+use esp_println as _;
 
 // --- LED PWM Definitions ---
 #[derive(Clone, Copy, Debug, defmt::Format, PartialEq)]
@@ -92,12 +93,6 @@ const HEAP_SIZE: usize = 200 * 1024; // Start with 200KB, adjust as needed
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-#[panic_handler]
-fn panic_handler(info: &core::panic::PanicInfo) -> ! {
-    defmt::error!("{}", defmt::Display2Format(info));
-    loop {}
-}
-
 // --- Define a struct that implements OnOffHooks ---
 #[derive(Default)]
 struct LedDeviceLogic;
@@ -120,7 +115,7 @@ impl LedDeviceLogic {
 
 impl OnOffHooks for LedDeviceLogic {
     const CLUSTER: Cluster<'static> = ON_OFF_FULL_CLUSTER
-        .with_revision(1)
+        .with_revision(6)
         .with_attrs(with!(
             required;
             AttributeId::OnOff
@@ -132,7 +127,7 @@ impl OnOffHooks for LedDeviceLogic {
     }
 
     fn set_on_off(&self, on: bool) {
-        info!("OnOff command received: {}", on);
+        defmt::info!("OnOff command received: {}", on);
         let new_state = if on {
             // Define ON state (e.g., Warm White at 50%)
             LedPwmState {
@@ -149,7 +144,7 @@ impl OnOffHooks for LedDeviceLogic {
         // Update the LED state
         if let Ok(mut state_guard) = LED_STATE.try_lock() {
             *state_guard = new_state;
-            info!("Set LED target state to: {:?}", new_state);
+            defmt::info!("Set LED target state to: {:?}", new_state);
         } else {
             defmt::warn!("Could not acquire LED_STATE lock to set on/off");
         }
@@ -191,10 +186,10 @@ struct PwmPins {
 // --- Define the PWM update task ---
 #[embassy_executor::task]
 async fn pwm_task(mut pwm_pins: PwmPins, period: u16) {
-    info!("PWM task started");
+    defmt::info!("PWM task started");
     let mut ticker = Ticker::every(Duration::from_millis(20)); // ~50 Hz update rate
 
-    info!("PWM Period: {}", period);
+    defmt::info!("PWM Period: {}", period);
 
     let mut last_applied_state = LedPwmState::default();
 
@@ -203,8 +198,9 @@ async fn pwm_task(mut pwm_pins: PwmPins, period: u16) {
         let target_state = *LED_STATE.lock().await;
 
         if target_state != last_applied_state {
-            info!("Applying PWM state: {:?}", target_state);
-            let scale = |val: u8| (val as u32 * period as u32 / 255) as u16;
+            defmt::info!("Applying PWM state: {:?}", target_state);
+            // Scale 0-255 input to 0-period range
+            let scale = |val: u8| ((val as u32 * period as u32) / 255) as u16;
 
             // Set duty cycles using timestamps
             pwm_pins.pin_r.set_timestamp(scale(target_state.r));
@@ -221,8 +217,7 @@ async fn pwm_task(mut pwm_pins: PwmPins, period: u16) {
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    rtt_target::rtt_init_print!();
-    info!("Starting Matter + Direct PWM example (ESP32-C6)...");
+    defmt::info!("Starting Matter + Direct PWM example (ESP32-C6)...");
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
@@ -231,11 +226,11 @@ async fn main(spawner: Spawner) -> ! {
     // --- Select your 5 PWM GPIO pins for ESP32-C6 ---
     // IMPORTANT: Check the ESP32-C6 datasheet for valid MCPWM output pins!
     // Using GPIO0-GPIO4 as placeholders:
-    let pin_r = peripherals.GPIO0;
-    let pin_g = peripherals.GPIO1;
-    let pin_b = peripherals.GPIO2;
-    let pin_cw = peripherals.GPIO3;
-    let pin_ww = peripherals.GPIO4;
+    let pin_r = peripherals.GPIO3;
+    let pin_g = peripherals.GPIO2;
+    let pin_b = peripherals.GPIO10;
+    let pin_cw = peripherals.GPIO1;
+    let pin_ww = peripherals.GPIO0;
     // --- End Pin Selection ---
 
     // Initialize Heap
@@ -250,18 +245,22 @@ async fn main(spawner: Spawner) -> ! {
         esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT); // Use SYSTEM for SW interrupt on C6
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
-    info!("Embassy initialized!");
-
-    // Initialize Wi-Fi/BLE Radio Controller
-    let init = esp_radio::init().expect("Failed to initialize radio controller");
+    defmt::info!("Embassy initialized!");
 
     // --- PWM Initialization ---
-    info!("Initializing MCPWM...");
-    let clock_cfg = PeripheralClockConfig::with_frequency(Rate::from_khz(20)).unwrap();
+    defmt::info!("Initializing MCPWM...");
+    // Use a higher frequency that's valid for ESP32-C6 MCPWM (e.g., 32 MHz)
+    let clock_cfg = match PeripheralClockConfig::with_frequency(Rate::from_mhz(32)) {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            defmt::error!("failed to set up clock, {:?}", err);
+            panic!("oops");
+        }
+    };
     let mut mcpwm = McPwm::new(peripherals.MCPWM0, clock_cfg);
 
-    // Configure timer - using period of 99 for 0-99 range (like 0-100%)
-    let period = 99u16;
+    // Configure timer for ~20 kHz PWM frequency with period 0-999 (1000 steps)
+    let period = 999u16;
     let timer_clock_cfg = clock_cfg
         .timer_clock_with_frequency(period, PwmWorkingMode::Increase, Rate::from_khz(20))
         .unwrap();
@@ -297,8 +296,17 @@ async fn main(spawner: Spawner) -> ! {
         pin_ww,
     };
 
-    info!("MCPWM initialized.");
+    defmt::info!("MCPWM initialized.");
+
+    // == Spawn the PWM Task ==
+    // Pass the PWM pins to the task
+    spawner.spawn(pwm_task(pwm_pins, period)).unwrap();
+    defmt::info!("Spawned PWM task");
+
     // --- End PWM Initialization ---
+
+    // // Initialize Wi-Fi/BLE Radio Controller
+    let init = esp_radio::init().expect("Failed to initialize radio controller");
 
     // == Matter Stack Initialization ==
     // Custom rand function for esp-hal
@@ -346,19 +354,24 @@ async fn main(spawner: Spawner) -> ! {
             MatterAsync(desc::DescHandler::new(Dataver::new_rand(stack.matter().rand())).adapt()),
         );
 
+    if !stack.matter().is_commissioned() {
+        let matter = stack.matter();
+        matter
+            .print_standard_qr_code(QrTextType::Unicode, DiscoveryCapabilities::IP)
+            .unwrap();
+        defmt::info!("ready to commission");
+    } else {
+        defmt::info!("commissioned already");
+    }
+
     // Persistence (Dummy for now)
     let persist = stack
         .create_persist_with_comm_window(DummyKvBlobStore)
         .await
         .unwrap();
 
-    // == Spawn the PWM Task ==
-    // Pass the PWM pins to the task
-    spawner.spawn(pwm_task(pwm_pins, period)).unwrap();
-    info!("Spawned PWM task");
-
     // == Run the Matter Stack ==
-    info!("Running Matter stack...");
+    defmt::info!("Running Matter stack...");
     let matter = pin!(stack.run_coex(
         EmbassyWifi::new(
             // C6 uses WIFI and BLE peripherals
@@ -377,6 +390,7 @@ async fn main(spawner: Spawner) -> ! {
 
 // Matter Node definition
 const LIGHT_ENDPOINT_ID: u16 = 1;
+
 const NODE: Node = Node {
     id: 0,
     endpoints: &[
