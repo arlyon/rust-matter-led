@@ -1,0 +1,11 @@
+[settings]
+watch_path = "/home/arlyon/Downloads"
+recursive = false
+
+[formats.External]
+format = "kicad"
+output_path = "/home/arlyon/Programming/rust-matter-led/hardware/external"
+
+[profile]
+# username = "EXAMPLE"
+# password = "EXAMPLE"
