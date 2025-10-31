@@ -13,9 +13,13 @@ use core::pin::pin;
 use embassy_sync::mutex::Mutex;
 use esp_alloc::heap_allocator;
 use rs_matter::{
-    dm::{Cluster, clusters::on_off::HandlerAsyncAdaptor},
+    BasicCommData,
+    dm::{
+        Cluster,
+        clusters::{basic_info::BasicInfoConfig, on_off::HandlerAsyncAdaptor},
+        devices::test::{TEST_PID, TEST_VID},
+    },
     pairing::{DiscoveryCapabilities, qr::QrTextType},
-    with,
 };
 
 use embassy_executor::Spawner;
@@ -63,12 +67,7 @@ impl LedPwmState {
 static LED_STATE: Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, LedPwmState> =
     Mutex::new(LedPwmState::new());
 
-// --- Matter Imports ---
-use rs_matter_embassy::matter::dm::clusters::on_off::{
-    AttributeId, CommandId, FULL_CLUSTER as ON_OFF_FULL_CLUSTER, OnOffHandler, OnOffHooks,
-}; // Keep OnOffHooks
-use rs_matter_embassy::matter::dm::devices::DEV_TYPE_ON_OFF_LIGHT; // Basic On/Off Light type
-use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
+use rs_matter_embassy::matter::dm::devices::DEV_TYPE_ON_OFF_LIGHT;
 use rs_matter_embassy::matter::dm::{
     Async as MatterAsync, Dataver, EmptyHandler, Endpoint, EpClMatcher, Node,
 };
@@ -83,7 +82,8 @@ use rs_matter_embassy::{
     matter::dm::clusters::desc::{self, ClusterHandler as _},
     wireless::EmbassyWifi,
 };
-// --- End Matter Imports ---
+
+use firmware::clusters::*;
 
 // Define Heap and Bump sizes
 const BUMP_SIZE: usize = 16500;
@@ -114,13 +114,7 @@ impl LedDeviceLogic {
 }
 
 impl OnOffHooks for LedDeviceLogic {
-    const CLUSTER: Cluster<'static> = ON_OFF_FULL_CLUSTER
-        .with_revision(6)
-        .with_attrs(with!(
-            required;
-            AttributeId::OnOff
-        ))
-        .with_cmds(with!(CommandId::Off | CommandId::On | CommandId::Toggle));
+    const CLUSTER: Cluster<'static> = ON_OFF_FULL_CLUSTER;
 
     fn on_off(&self) -> bool {
         Self::get_current_on_off()
@@ -138,7 +132,7 @@ impl OnOffHooks for LedDeviceLogic {
                 ww: 128,
             }
         } else {
-            LedPwmState::default() // OFF
+            LedPwmState::default()
         };
 
         // Update the LED state
@@ -322,11 +316,28 @@ async fn main(spawner: Spawner) -> ! {
         }
     }
 
+    let info: &'static _ = Box::leak(Box::new(BasicInfoConfig {
+        vid: TEST_VID,
+        pid: TEST_PID,
+        hw_ver: 1,
+        hw_ver_str: "1",
+        sw_ver: 1,
+        sw_ver_str: "1",
+        serial_no: "123456789",
+        product_name: "ACME Test",
+        vendor_name: "ACME",
+        device_name: "MyTest",
+        ..BasicInfoConfig::new()
+    }));
+
     let stack =
         &*Box::leak(Box::new_uninit()).init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
-            &TEST_DEV_DET,
-            TEST_DEV_COMM,
-            &TEST_DEV_ATT,
+            &info,
+            BasicCommData {
+                discriminator: 0x9546,
+                password: 0x1234,
+            },
+            &firmware::TestDevAtt(()),
             epoch,
             esp_rand,
         ));
