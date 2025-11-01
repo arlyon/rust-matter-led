@@ -738,6 +738,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "edge-mdns"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d07725570484c42bbf289cb1b55bb6e941cef107993ee8a0f317e5fed7538165"
+dependencies = [
+ "defmt 0.3.100",
+ "domain",
+ "edge-nal 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "embassy-futures",
+ "embassy-sync 0.7.2",
+ "embassy-time 0.4.0",
+ "heapless 0.8.0",
+]
+
+[[package]]
 name = "edge-nal"
 version = "0.5.0"
 dependencies = [
@@ -1088,6 +1103,7 @@ version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7770e30ab55cfbf954c00019522490d6ce26a3334bede05a732ba61010e98e0"
 dependencies = [
+ "defmt 0.3.100",
  "embedded-io 0.6.1",
  "embedded-io-async 0.6.1",
  "enumset",
@@ -1650,6 +1666,8 @@ dependencies = [
  "embassy-time 0.5.0",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
+ "embedded-storage",
+ "embedded-storage-async",
  "embedded-test",
  "esp-alloc",
  "esp-backtrace",
@@ -2913,6 +2931,8 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.10.0",
  "cfg-if",
+ "defmt 0.3.100",
+ "edge-mdns",
  "edge-nal 0.5.0",
  "embassy-futures",
  "embassy-sync 0.7.2",

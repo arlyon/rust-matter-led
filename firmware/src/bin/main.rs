@@ -10,12 +10,12 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use core::pin::pin;
-use embassy_sync::mutex::Mutex;
+use embedded_storage_async::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use esp_alloc::heap_allocator;
+use esp_storage::{FlashStorage, FlashStorageError};
 use rs_matter::{
     BasicCommData,
     dm::{
-        Cluster,
         clusters::{basic_info::BasicInfoConfig, on_off::HandlerAsyncAdaptor},
         devices::test::{TEST_PID, TEST_VID},
     },
@@ -23,191 +23,35 @@ use rs_matter::{
 };
 
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Ticker};
-use esp_hal::{
-    clock::CpuClock,
-    gpio::Io,
-    mcpwm::{McPwm, PeripheralClockConfig, operator::PwmPinConfig, timer::PwmWorkingMode},
-    peripherals::MCPWM0,
-    time::Rate,
-    timer::timg::TimerGroup,
-};
+use esp_hal::{clock::CpuClock, gpio::Io, timer::timg::TimerGroup};
 
 use esp_backtrace as _;
 use esp_println as _;
 
-// --- LED PWM Definitions ---
-#[derive(Clone, Copy, Debug, defmt::Format, PartialEq)]
-struct LedPwmState {
-    r: u8,
-    g: u8,
-    b: u8,
-    cw: u8,
-    ww: u8,
-}
-
-impl Default for LedPwmState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LedPwmState {
-    pub const fn new() -> Self {
-        Self {
-            r: 0,
-            g: 0,
-            b: 0,
-            cw: 0,
-            ww: 0,
-        }
-    }
-}
-
-static LED_STATE: Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, LedPwmState> =
-    Mutex::new(LedPwmState::new());
-
-use rs_matter_embassy::matter::dm::devices::DEV_TYPE_ON_OFF_LIGHT;
-use rs_matter_embassy::matter::dm::{
-    Async as MatterAsync, Dataver, EmptyHandler, Endpoint, EpClMatcher, Node,
-};
-use rs_matter_embassy::matter::error::Error as MatterError;
-use rs_matter_embassy::matter::tlv::Nullable;
 use rs_matter_embassy::matter::utils::init::InitMaybeUninit;
-use rs_matter_embassy::matter::{clusters, devices};
-use rs_matter_embassy::stack::persist::DummyKvBlobStore;
 use rs_matter_embassy::wireless::esp::EspWifiDriver;
 use rs_matter_embassy::{epoch::epoch, wireless::EmbassyWifiMatterStack};
 use rs_matter_embassy::{
     matter::dm::clusters::desc::{self, ClusterHandler as _},
     wireless::EmbassyWifi,
 };
+use rs_matter_embassy::{
+    matter::dm::{Async as MatterAsync, Dataver, EmptyHandler, EpClMatcher},
+    persist::EmbassyKvBlobStore,
+};
 
 use firmware::clusters::*;
+use firmware::device::LedDeviceLogic;
+use firmware::led::pwm::{PwmConfig, init_pwm, pwm_task};
+use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 
 // Define Heap and Bump sizes
-const BUMP_SIZE: usize = 16500;
+const BUMP_SIZE: usize = 65536; // 64KB for Matter stack operations (certificates, TLV encoding, etc.)
 // ESP32-C6 has unified RAM, so only one heap allocator needed.
 // Adjust size based on testing, Matter + TCP/IP + BLE + PWM can be memory intensive.
 const HEAP_SIZE: usize = 200 * 1024; // Start with 200KB, adjust as needed
 
 esp_bootloader_esp_idf::esp_app_desc!();
-
-// --- Define a struct that implements OnOffHooks ---
-#[derive(Default)]
-struct LedDeviceLogic;
-
-impl LedDeviceLogic {
-    fn get_current_on_off() -> bool {
-        // We need to check this synchronously, so we use try_lock
-        // In a real implementation, you might want to store this state separately
-        if let Ok(state_guard) = LED_STATE.try_lock() {
-            state_guard.r != 0
-                || state_guard.g != 0
-                || state_guard.b != 0
-                || state_guard.cw != 0
-                || state_guard.ww != 0
-        } else {
-            false // Default to off if we can't get the lock
-        }
-    }
-}
-
-impl OnOffHooks for LedDeviceLogic {
-    const CLUSTER: Cluster<'static> = ON_OFF_FULL_CLUSTER;
-
-    fn on_off(&self) -> bool {
-        Self::get_current_on_off()
-    }
-
-    fn set_on_off(&self, on: bool) {
-        defmt::info!("OnOff command received: {}", on);
-        let new_state = if on {
-            // Define ON state (e.g., Warm White at 50%)
-            LedPwmState {
-                r: 0,
-                g: 0,
-                b: 0,
-                cw: 0,
-                ww: 128,
-            }
-        } else {
-            LedPwmState::default()
-        };
-
-        // Update the LED state
-        if let Ok(mut state_guard) = LED_STATE.try_lock() {
-            *state_guard = new_state;
-            defmt::info!("Set LED target state to: {:?}", new_state);
-        } else {
-            defmt::warn!("Could not acquire LED_STATE lock to set on/off");
-        }
-    }
-
-    fn start_up_on_off(&self) -> Nullable<rs_matter::dm::clusters::on_off::StartUpOnOffEnum> {
-        // Return null to indicate we don't support startup on/off configuration
-        Nullable::none()
-    }
-
-    fn set_start_up_on_off(
-        &self,
-        _value: Nullable<rs_matter::dm::clusters::on_off::StartUpOnOffEnum>,
-    ) -> Result<(), MatterError> {
-        // We don't support configuring startup behavior, but return Ok to not cause errors
-        Ok(())
-    }
-
-    async fn handle_off_with_effect(
-        &self,
-        _effect: rs_matter::dm::clusters::on_off::EffectVariantEnum,
-    ) {
-        // For now, just turn off immediately
-        // You could implement fade effects here based on the effect parameter
-        self.set_on_off(false);
-    }
-}
-// --- End OnOffHooks implementation ---
-
-// PWM pin holder struct
-struct PwmPins {
-    pin_r: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 0, true>,
-    pin_g: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 0, false>,
-    pin_b: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 1, true>,
-    pin_cw: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 1, false>,
-    pin_ww: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 2, true>,
-}
-
-// --- Define the PWM update task ---
-#[embassy_executor::task]
-async fn pwm_task(mut pwm_pins: PwmPins, period: u16) {
-    defmt::info!("PWM task started");
-    let mut ticker = Ticker::every(Duration::from_millis(20)); // ~50 Hz update rate
-
-    defmt::info!("PWM Period: {}", period);
-
-    let mut last_applied_state = LedPwmState::default();
-
-    loop {
-        ticker.next().await;
-        let target_state = *LED_STATE.lock().await;
-
-        if target_state != last_applied_state {
-            defmt::info!("Applying PWM state: {:?}", target_state);
-            // Scale 0-255 input to 0-period range
-            let scale = |val: u8| ((val as u32 * period as u32) / 255) as u16;
-
-            // Set duty cycles using timestamps
-            pwm_pins.pin_r.set_timestamp(scale(target_state.r));
-            pwm_pins.pin_g.set_timestamp(scale(target_state.g));
-            pwm_pins.pin_b.set_timestamp(scale(target_state.b));
-            pwm_pins.pin_cw.set_timestamp(scale(target_state.cw));
-            pwm_pins.pin_ww.set_timestamp(scale(target_state.ww));
-
-            last_applied_state = target_state;
-        }
-    }
-}
-// --- End PWM update task ---
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -217,89 +61,34 @@ async fn main(spawner: Spawner) -> ! {
     let peripherals = esp_hal::init(config);
     let _io = Io::new(peripherals.IO_MUX);
 
-    // --- Select your 5 PWM GPIO pins for ESP32-C6 ---
-    // IMPORTANT: Check the ESP32-C6 datasheet for valid MCPWM output pins!
-    // Using GPIO0-GPIO4 as placeholders:
-    let pin_r = peripherals.GPIO3;
-    let pin_g = peripherals.GPIO2;
-    let pin_b = peripherals.GPIO10;
-    let pin_cw = peripherals.GPIO1;
-    let pin_ww = peripherals.GPIO0;
-    // --- End Pin Selection ---
-
     // Initialize Heap
     heap_allocator!(size: HEAP_SIZE);
 
     // Initialize Embassy Timer Driver
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    // Note: C6 might use different interrupt setup, esp_rtos::start handles it.
-    // Check esp-hal examples for specific C6 interrupt setup if needed.
-    // For C6 (RISC-V), SW_INTERRUPT might not be the standard, but esp_rtos handles it.
     let sw_interrupt =
-        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT); // Use SYSTEM for SW interrupt on C6
+        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
 
     defmt::info!("Embassy initialized!");
 
     // --- PWM Initialization ---
-    defmt::info!("Initializing MCPWM...");
-    // Use a higher frequency that's valid for ESP32-C6 MCPWM (e.g., 32 MHz)
-    let clock_cfg = match PeripheralClockConfig::with_frequency(Rate::from_mhz(32)) {
-        Ok(cfg) => cfg,
-        Err(err) => {
-            defmt::error!("failed to set up clock, {:?}", err);
-            panic!("oops");
-        }
-    };
-    let mut mcpwm = McPwm::new(peripherals.MCPWM0, clock_cfg);
+    let (pwm_pins, period) = init_pwm(
+        peripherals.MCPWM0,
+        PwmConfig::default(),
+        peripherals.GPIO3,  // R
+        peripherals.GPIO2,  // G
+        peripherals.GPIO10, // B
+        peripherals.GPIO1,  // CW
+        peripherals.GPIO0,  // WW
+    )
+    .expect("Failed to initialize PWM");
 
-    // Configure timer for ~20 kHz PWM frequency with period 0-999 (1000 steps)
-    let period = 999u16;
-    let timer_clock_cfg = clock_cfg
-        .timer_clock_with_frequency(period, PwmWorkingMode::Increase, Rate::from_khz(20))
-        .unwrap();
-    mcpwm.timer0.start(timer_clock_cfg);
-
-    // Configure Operators and connect pins
-    mcpwm.operator0.set_timer(&mcpwm.timer0);
-    let (pin_r, pin_g) = mcpwm.operator0.with_pins(
-        pin_r,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-        pin_g,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-    );
-
-    mcpwm.operator1.set_timer(&mcpwm.timer0);
-    let (pin_b, pin_cw) = mcpwm.operator1.with_pins(
-        pin_b,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-        pin_cw,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-    );
-
-    mcpwm.operator2.set_timer(&mcpwm.timer0);
-    let pin_ww = mcpwm
-        .operator2
-        .with_pin_a(pin_ww, PwmPinConfig::UP_ACTIVE_HIGH);
-
-    let pwm_pins = PwmPins {
-        pin_r,
-        pin_g,
-        pin_b,
-        pin_cw,
-        pin_ww,
-    };
-
-    defmt::info!("MCPWM initialized.");
-
-    // == Spawn the PWM Task ==
-    // Pass the PWM pins to the task
+    // Spawn the PWM Task
     spawner.spawn(pwm_task(pwm_pins, period)).unwrap();
     defmt::info!("Spawned PWM task");
 
-    // --- End PWM Initialization ---
-
-    // // Initialize Wi-Fi/BLE Radio Controller
+    // Initialize Wi-Fi/BLE Radio Controller
     let init = esp_radio::init().expect("Failed to initialize radio controller");
 
     // == Matter Stack Initialization ==
@@ -334,8 +123,8 @@ async fn main(spawner: Spawner) -> ! {
         &*Box::leak(Box::new_uninit()).init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
             &info,
             BasicCommData {
-                discriminator: 0x9546,
-                password: 0x1234,
+                discriminator: 0x0F00, // 12-bit value (0-4095)
+                password: 20202021,    // 27-bit passcode (must be formatted as 8 decimal digits)
             },
             &firmware::TestDevAtt(()),
             epoch,
@@ -375,9 +164,19 @@ async fn main(spawner: Spawner) -> ! {
         defmt::info!("commissioned already");
     }
 
+    let storage = esp_storage::FlashStorage::new(peripherals.FLASH);
+    let storage = BlockingFlashStorage(storage);
+    // sequential-storage requires:
+    // - Start/end aligned to ERASE_SIZE (4096 bytes for ESP32)
+    // - At least 2 sectors (8192 bytes minimum)
+    // Using 32 sectors (128KB) for Matter key-value storage (fabrics, certs, ACLs, etc.)
+    const STORAGE_START: u32 = 0x9000; // Start at a safe offset in flash
+    const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
+    let kv_store = EmbassyKvBlobStore::new(storage, STORAGE_START..(STORAGE_START + STORAGE_SIZE));
+
     // Persistence (Dummy for now)
     let persist = stack
-        .create_persist_with_comm_window(DummyKvBlobStore)
+        .create_persist_with_comm_window(kv_store)
         .await
         .unwrap();
 
@@ -394,28 +193,51 @@ async fn main(spawner: Spawner) -> ! {
         (),
     ));
 
-    matter.await.expect("matter stack crashed"); // This runs forever
-
-    unreachable!();
+    match matter.await {
+        Ok(_) => {
+            unreachable!();
+        }
+        Err(e) => {
+            defmt::error!("Matter error: {:?}", e);
+            panic!();
+        }
+    }
 }
 
-// Matter Node definition
-const LIGHT_ENDPOINT_ID: u16 = 1;
+struct BlockingFlashStorage<'a>(FlashStorage<'a>);
 
-const NODE: Node = Node {
-    id: 0,
-    endpoints: &[
-        EmbassyWifiMatterStack::<0, ()>::root_endpoint(),
-        Endpoint {
-            id: LIGHT_ENDPOINT_ID,
-            // Define device type (On/Off Light is simple to start)
-            device_types: devices!(DEV_TYPE_ON_OFF_LIGHT),
-            // List clusters implemented on this endpoint
-            clusters: clusters!(
-                desc::DescHandler::CLUSTER, // Descriptor cluster (Mandatory)
-                LedDeviceLogic::CLUSTER,    // OnOff cluster
-                                            // Add more cluster IDs here later (e.g., LevelControl, ColorControl)
-            ),
-        },
-    ],
-};
+impl ErrorType for BlockingFlashStorage<'_> {
+    type Error = FlashStorageError;
+}
+
+impl NorFlash for BlockingFlashStorage<'_> {
+    const WRITE_SIZE: usize = FlashStorage::WORD_SIZE as _;
+
+    const ERASE_SIZE: usize = FlashStorage::SECTOR_SIZE as _;
+
+    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        embedded_storage::nor_flash::NorFlash::erase(&mut self.0, from, to)
+    }
+
+    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        embedded_storage::nor_flash::NorFlash::write(&mut self.0, offset, bytes)
+    }
+}
+
+impl ReadNorFlash for BlockingFlashStorage<'_> {
+    const READ_SIZE: usize = FlashStorage::WORD_SIZE as _;
+
+    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        embedded_storage::nor_flash::ReadNorFlash::read(&mut self.0, offset, bytes)
+    }
+
+    fn capacity(&self) -> usize {
+        embedded_storage::nor_flash::ReadNorFlash::capacity(&self.0)
+    }
+}
+
+/// The esp storage is synchronous, so we just provide an async wrapper.
+///
+/// THIS WILL STILL BLOCK
+/// see: https://github.com/esp-rs/esp-storage/issues/39#issuecomment-1980991446
+impl embedded_storage_async::nor_flash::MultiwriteNorFlash for BlockingFlashStorage<'_> {}

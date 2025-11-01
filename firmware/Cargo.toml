@@ -90,9 +90,11 @@ static_cell      = "2.1.1"
 # rs-matter = { version = "0.1.1", git = "https://github.com/project-chip/rs-matter.git", default-features = false }
 rs-matter = { path = "../../rs-matter/rs-matter", default-features = false, features = ["defmt"] }
 rs-matter-embassy = { path = "../../rs-matter-embassy/rs-matter-embassy", features = ["embassy-net", "esp"] }
-rs-matter-stack = { path = "../../rs-matter-stack" }
+rs-matter-stack = { path = "../../rs-matter-stack", features = ["defmt", "kv-blob-store-16384"] }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 esp-storage = { version = "0.8.1", features = ["esp32c6", "defmt"] }
+embedded-storage-async = "0.4.1"
+embedded-storage = "0.3.1"
 
 [dev-dependencies]
 embedded-test = { version = "0.7.0-alpha.3", git = "https://github.com/probe-rs/embedded-test", branch = "next", features = [

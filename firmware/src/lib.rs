@@ -6,6 +6,9 @@ use rs_matter::{
 };
 
 pub mod clusters;
+pub mod device;
+pub mod led;
+pub mod matter;
 
 #[derive(Debug, Clone, defmt::Format)]
 pub struct TestDevAtt(pub ());
