@@ -331,7 +331,7 @@
 					(justify left top)
 				)
 			)
-			(property "Footprint" "kicad_global:26011106"
+			(property "Footprint" "External:26011106"
 				(at 21.59 -94.92 0)
 				(effects
 					(font
@@ -661,149 +661,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Regulator_Switching:R-78E5.0-1.0"
-			(pin_names
-				(offset 0.254)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "U"
-				(at -3.81 3.175 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "R-78E5.0-1.0"
-				(at 0 3.175 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Footprint" "Converter_DCDC:Converter_DCDC_RECOM_R-78E-0.5_THT"
-				(at 1.27 -6.35 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-						(italic yes)
-					)
-					(justify left)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "https://www.recom-power.com/pdf/Innoline/R-78Exx-1.0.pdf"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "1A Step-Down DC/DC-Regulator, 7-28V input, 5V fixed Output Voltage, LM78xx replacement, -40°C to +85°C, SIP3"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "dc-dc recom Step-Down DC/DC-Regulator"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "Converter*DCDC*RECOM*R*78E*0.5*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "R-78E5.0-1.0_0_1"
-				(rectangle
-					(start -5.08 1.905)
-					(end 5.08 -5.08)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type background)
-					)
-				)
-			)
-			(symbol "R-78E5.0-1.0_1_1"
-				(pin power_in line
-					(at -7.62 0 0)
-					(length 2.54)
-					(name "IN"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin power_in line
-					(at 0 -7.62 90)
-					(length 2.54)
-					(name "GND"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin power_out line
-					(at 7.62 0 180)
-					(length 2.54)
-					(name "OUT"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "Symbols:Waveshare_ESP32c6"
+		(symbol "Internal:Waveshare_ESP32c6"
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
@@ -823,7 +681,7 @@
 					)
 				)
 			)
-			(property "Footprint" "Library:Waveshare ESP32c6"
+			(property "Footprint" "Internal:Waveshare ESP32c6"
 				(at 0 0 0)
 				(effects
 					(font
@@ -1272,7 +1130,7 @@
 						)
 					)
 				)
-				(pin passive line
+				(pin power_in line
 					(at -12.7 -13.97 0)
 					(length 3.81)
 					(name "Pin_14"
@@ -1290,7 +1148,7 @@
 						)
 					)
 				)
-				(pin passive line
+				(pin power_out line
 					(at -12.7 -16.51 0)
 					(length 3.81)
 					(name "Pin_15"
@@ -1796,6 +1654,148 @@
 						)
 					)
 					(number "32"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "Regulator_Switching:R-78E5.0-1.0"
+			(pin_names
+				(offset 0.254)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "U"
+				(at -3.81 3.175 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "R-78E5.0-1.0"
+				(at 0 3.175 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" "Converter_DCDC:Converter_DCDC_RECOM_R-78E-0.5_THT"
+				(at 1.27 -6.35 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+						(italic yes)
+					)
+					(justify left)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "https://www.recom-power.com/pdf/Innoline/R-78Exx-1.0.pdf"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "1A Step-Down DC/DC-Regulator, 7-28V input, 5V fixed Output Voltage, LM78xx replacement, -40°C to +85°C, SIP3"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "dc-dc recom Step-Down DC/DC-Regulator"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "Converter*DCDC*RECOM*R*78E*0.5*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "R-78E5.0-1.0_0_1"
+				(rectangle
+					(start -5.08 1.905)
+					(end 5.08 -5.08)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "R-78E5.0-1.0_1_1"
+				(pin power_in line
+					(at -7.62 0 0)
+					(length 2.54)
+					(name "IN"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -7.62 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_out line
+					(at 7.62 0 180)
+					(length 2.54)
+					(name "OUT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -2456,6 +2456,113 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "power:PWR_FLAG"
+			(power)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "#FLG"
+				(at 0 1.905 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Value" "PWR_FLAG"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Special symbol for telling ERC where power comes from"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "flag power"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "PWR_FLAG_0_0"
+				(pin power_out line
+					(at 0 0 90)
+					(length 0)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "PWR_FLAG_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 1.27) (xy -1.016 1.905) (xy 0 2.54) (xy 1.016 1.905) (xy 0 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+	)
+	(junction
+		(at 57.15 87.63)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "026d00a9-a7b8-4df6-a55f-2c836166c994")
 	)
 	(junction
 		(at 175.26 142.24)
@@ -2476,10 +2583,16 @@
 		(uuid "425b9738-6b4c-4798-a284-2f5600855d06")
 	)
 	(junction
+		(at 66.04 87.63)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "522be4c4-cc3c-4513-9b90-be20f8b8c3ae")
+	)
+	(junction
 		(at 184.15 29.21)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "85638642-aece-449f-9e29-02854c2bac6f")
+		(uuid "5f1241dc-63fd-4dd0-a4fe-edec1e7d7b61")
 	)
 	(junction
 		(at 184.15 77.47)
@@ -2506,12 +2619,6 @@
 		(uuid "dc7fcf81-4199-45a2-9cef-b853986cf479")
 	)
 	(junction
-		(at 184.15 36.83)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "ed68651a-97db-4e14-b38e-6693705aa3b6")
-	)
-	(junction
 		(at 168.91 64.77)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2523,11 +2630,129 @@
 		(color 0 0 0 0)
 		(uuid "f361a753-295c-4202-b44c-48c94d1f1677")
 	)
-	(junction
-		(at 60.96 87.63)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "f7150adf-a662-4fd5-9839-75b1dc79a73c")
+	(no_connect
+		(at 101.6 83.82)
+		(uuid "0671f710-cf12-4a1b-8031-14431ea2c3fb")
+	)
+	(no_connect
+		(at 251.46 86.36)
+		(uuid "08c8c403-a412-4dea-ad41-078008ceb938")
+	)
+	(no_connect
+		(at 251.46 91.44)
+		(uuid "0bffb995-92b6-4c47-a030-52081ba0e740")
+	)
+	(no_connect
+		(at 134.62 109.22)
+		(uuid "0fbd5d8e-ea32-40a6-b59f-4a42757e75ad")
+	)
+	(no_connect
+		(at 134.62 71.12)
+		(uuid "12cde51b-a991-4a0f-98c4-129f9ee49f70")
+	)
+	(no_connect
+		(at 134.62 106.68)
+		(uuid "13a3408d-8011-4c28-9745-6e4228a62709")
+	)
+	(no_connect
+		(at 134.62 86.36)
+		(uuid "1f5744fe-04a7-40ec-ab9e-5629b4a30cd1")
+	)
+	(no_connect
+		(at 134.62 81.28)
+		(uuid "21ecc292-9168-4bba-8458-a9a435cab0ab")
+	)
+	(no_connect
+		(at 134.62 78.74)
+		(uuid "29c18e24-6f2d-4904-87c9-cd5d619181ce")
+	)
+	(no_connect
+		(at 101.6 78.74)
+		(uuid "29cae123-1286-4033-b144-1c24fbfb9435")
+	)
+	(no_connect
+		(at 134.62 91.44)
+		(uuid "2c0b19d5-5363-4e15-a251-296b6c2b0c0c")
+	)
+	(no_connect
+		(at 251.46 88.9)
+		(uuid "37b2f8a0-8d93-49b4-91a5-7e44f7979fe3")
+	)
+	(no_connect
+		(at 134.62 96.52)
+		(uuid "496fa4ff-ffb8-4689-ae98-37bfdfb2b3a8")
+	)
+	(no_connect
+		(at 101.6 71.12)
+		(uuid "4cb35f52-1dc6-43fb-a85f-bcea3f3ffb00")
+	)
+	(no_connect
+		(at 251.46 83.82)
+		(uuid "51f59db8-d62b-40e9-bb6d-c4502c0b0861")
+	)
+	(no_connect
+		(at 134.62 104.14)
+		(uuid "5ace1c3f-572e-449e-9ad1-4d8be084d932")
+	)
+	(no_connect
+		(at 134.62 76.2)
+		(uuid "5ade3768-2b05-4ae6-9a95-49a5fd119f6d")
+	)
+	(no_connect
+		(at 134.62 73.66)
+		(uuid "6ce3efac-e296-4e88-936d-f0f902f44583")
+	)
+	(no_connect
+		(at 101.6 73.66)
+		(uuid "9ff14e84-508c-4d51-982e-7f2e1fefb6a4")
+	)
+	(no_connect
+		(at 101.6 109.22)
+		(uuid "a59d0f9c-e4df-49b0-a1ec-0c5842f45826")
+	)
+	(no_connect
+		(at 134.62 93.98)
+		(uuid "ac695946-f655-4f5f-867e-6da59160fc98")
+	)
+	(no_connect
+		(at 134.62 83.82)
+		(uuid "af5303d8-8aab-492e-8b35-bd0e5e047daa")
+	)
+	(no_connect
+		(at 101.6 76.2)
+		(uuid "b2ea32c0-891e-48d6-9dcd-2fa95e72d435")
+	)
+	(no_connect
+		(at 251.46 93.98)
+		(uuid "b7168b84-1409-4dd8-b0fe-6b20180f984a")
+	)
+	(no_connect
+		(at 134.62 88.9)
+		(uuid "c58fc996-5590-4c7e-8025-73b91ba6f72e")
+	)
+	(no_connect
+		(at 101.6 81.28)
+		(uuid "cf0c465c-963c-4eb0-a46c-f5ddbe05e4fb")
+	)
+	(no_connect
+		(at 251.46 96.52)
+		(uuid "d096b34d-994d-402c-8797-06d183a6608a")
+	)
+	(no_connect
+		(at 101.6 96.52)
+		(uuid "d734b014-9811-403b-adcd-b94955f3e1fd")
+	)
+	(no_connect
+		(at 101.6 91.44)
+		(uuid "e254a3ac-6aaf-45ff-8965-e0e7d489afde")
+	)
+	(no_connect
+		(at 134.62 101.6)
+		(uuid "e97155b1-49ef-4645-9e6b-a7a8feda537d")
+	)
+	(no_connect
+		(at 134.62 99.06)
+		(uuid "ecb3e34e-0a98-4b7b-89d6-aacfe4604a3c")
 	)
 	(wire
 		(pts
@@ -2541,7 +2766,17 @@
 	)
 	(wire
 		(pts
-			(xy 68.58 87.63) (xy 60.96 87.63)
+			(xy 184.15 29.21) (xy 184.15 36.83)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "22e3ab06-2cd0-471f-b72c-bd994dc94725")
+	)
+	(wire
+		(pts
+			(xy 68.58 87.63) (xy 66.04 87.63)
 		)
 		(stroke
 			(width 0)
@@ -2558,16 +2793,6 @@
 			(type default)
 		)
 		(uuid "5e0a4ee2-bd56-4e9e-a8fe-651618475bb6")
-	)
-	(wire
-		(pts
-			(xy 184.15 36.83) (xy 184.15 29.21)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "67335fdb-67a1-498e-9001-8f265a06a108")
 	)
 	(wire
 		(pts
@@ -2611,6 +2836,16 @@
 	)
 	(wire
 		(pts
+			(xy 57.15 87.63) (xy 55.88 87.63)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "a1f213ca-342e-4776-83f5-d6194e41c3f9")
+	)
+	(wire
+		(pts
 			(xy 176.53 85.09) (xy 176.53 90.17)
 		)
 		(stroke
@@ -2631,7 +2866,7 @@
 	)
 	(wire
 		(pts
-			(xy 60.96 87.63) (xy 55.88 87.63)
+			(xy 57.15 87.63) (xy 66.04 87.63)
 		)
 		(stroke
 			(width 0)
@@ -2688,16 +2923,6 @@
 			(type default)
 		)
 		(uuid "f1a69bdd-5737-489a-b98b-94bb4325f2c6")
-	)
-	(wire
-		(pts
-			(xy 184.15 36.83) (xy 184.15 39.37)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "fc95dc90-fcfe-49d7-b6a1-4df681163ab0")
 	)
 	(wire
 		(pts
@@ -3514,6 +3739,72 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 57.15 87.63 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "2c3ce540-1119-434a-83b0-7c79298f64a0")
+		(property "Reference" "#FLG01"
+			(at 57.15 85.725 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 57.15 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 57.15 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 57.15 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Special symbol for telling ERC where power comes from"
+			(at 57.15 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "c3404970-6cd5-4ac0-9a4d-5cc85a643c6b")
+		)
+		(instances
+			(project ""
+				(path "/485764ed-5b69-4a83-9e01-a6e159d31563"
+					(reference "#FLG01")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Transistor_FET:AO3400A")
 		(at 181.61 41.91 0)
 		(unit 1)
@@ -3797,7 +4088,7 @@
 	)
 	(symbol
 		(lib_id "power:+24V")
-		(at 60.96 87.63 0)
+		(at 66.04 87.63 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -3806,7 +4097,7 @@
 		(fields_autoplaced yes)
 		(uuid "486d0ed7-54bb-4960-9add-416eca7898a5")
 		(property "Reference" "#PWR04"
-			(at 60.96 91.44 0)
+			(at 66.04 91.44 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3815,7 +4106,7 @@
 			)
 		)
 		(property "Value" "+24V"
-			(at 60.96 82.55 0)
+			(at 66.04 82.55 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3823,7 +4114,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 60.96 87.63 0)
+			(at 66.04 87.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3832,7 +4123,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 60.96 87.63 0)
+			(at 66.04 87.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3841,7 +4132,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"+24V\""
-			(at 60.96 87.63 0)
+			(at 66.04 87.63 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4417,7 +4708,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Symbols:Waveshare_ESP32c6")
+		(lib_id "Internal:Waveshare_ESP32c6")
 		(at 120.65 90.17 0)
 		(unit 2)
 		(exclude_from_sim no)
@@ -4442,7 +4733,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Library:Waveshare ESP32c6"
+		(property "Footprint" "Internal:Waveshare ESP32c6"
 			(at 120.65 90.17 0)
 			(effects
 				(font
@@ -5149,7 +5440,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Symbols:Waveshare_ESP32c6")
+		(lib_id "Internal:Waveshare_ESP32c6")
 		(at 114.3 90.17 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -5175,7 +5466,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Library:Waveshare ESP32c6"
+		(property "Footprint" "Internal:Waveshare ESP32c6"
 			(at 114.3 90.17 0)
 			(effects
 				(font

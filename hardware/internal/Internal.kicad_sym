@@ -22,7 +22,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Library:Waveshare ESP32c6"
+		(property "Footprint" "Internal:Waveshare ESP32c6"
 			(at 0 0 0)
 			(effects
 				(font
@@ -471,7 +471,7 @@
 					)
 				)
 			)
-			(pin passive line
+			(pin power_in line
 				(at -12.7 -13.97 0)
 				(length 3.81)
 				(name "Pin_14"
@@ -489,7 +489,7 @@
 					)
 				)
 			)
-			(pin passive line
+			(pin power_out line
 				(at -12.7 -16.51 0)
 				(length 3.81)
 				(name "Pin_15"
