@@ -1,4 +1,4 @@
-26726933303483029
+26737502035724754
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -61375,6 +61375,13 @@ One digit LED 7 segment SA39-11 SC39-11 SA39-12 SC39-12
 0
 10
 10
+External
+26011106
+2601-1106-1
+Connector
+0
+12
+12
 Ferrite_THT
 LairdTech_28C0236-0JW-10
 Ferrite, vertical, LairdTech 28C0236-0JW-10, https://assets.lairdtech.com/home/brandworld/files/28C0236-0JW-10.pdf, JW Miller core https://www.bourns.com/products/magnetic-products/j.w.-miller-through-hole-ferrite-beads-emi-filters
@@ -69117,6 +69124,41 @@ THT
 0
 4
 2
+Internal
+Untitled
+
+
+0
+0
+0
+Internal
+Waveshare ESP32c6
+
+
+0
+32
+32
+Internal
+industries
+
+
+0
+0
+0
+Internal
+industries_5mm
+
+
+0
+0
+0
+Internal
+industries_10mm
+
+
+0
+0
+0
 Jumper
 Jumper_Harwin_S1621_P10.9mm
 Harwin SMD jumper link, 12.3x2.3mm, 1.8mm height, 10.9mm pad pitch, https://cdn.harwin.com/pdfs/S1621R.pdf
