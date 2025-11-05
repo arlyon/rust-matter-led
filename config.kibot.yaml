@@ -1,0 +1,120 @@
+kibot:
+  version: 1
+
+preflight:
+  run_erc: true
+  run_drc: true
+  check_zone_fills: true
+  ignore_unconnected: false
+
+outputs:
+  # Schematic outputs
+  - name: 'schematic_pdf'
+    comment: "Print schematic (PDF)"
+    type: pdf_sch_print
+    dir: output/schematics
+    options:
+      output: '%p-Schematic.%x'
+
+  - name: 'schematic_svg'
+    comment: "Print schematic (SVG)"
+    type: svg_sch_print
+    dir: output/schematics
+    options:
+      output: '%p-Schematic.%x'
+
+  # PCB outputs
+  - name: 'gerbers'
+    comment: "Gerber files"
+    type: gerber
+    dir: output/gerbers
+    layers:
+      - layer: F.Cu
+        suffix: F_Cu
+      - layer: B.Cu
+        suffix: B_Cu
+      - layer: F.SilkS
+        suffix: F_SilkS
+      - layer: B.SilkS
+        suffix: B_SilkS
+      - layer: F.Mask
+        suffix: F_Mask
+      - layer: B.Mask
+        suffix: B_Mask
+      - layer: F.Paste
+        suffix: F_Paste
+      - layer: B.Paste
+        suffix: B_Paste
+      - layer: Edge.Cuts
+        suffix: Edge_Cuts
+
+  - name: 'drill'
+    comment: "Drill files"
+    type: excellon
+    dir: output/gerbers
+    options:
+      output: '%p-drill.%x'
+
+  - name: 'position'
+    comment: "Pick and place file"
+    type: position
+    dir: output/assembly
+    options:
+      format: CSV
+      output: '%p-position.%x'
+
+  - name: 'bom'
+    comment: "Bill of Materials"
+    type: bom
+    dir: output/bom
+    options:
+      output: '%p-bom.%x'
+      format: CSV
+
+  - name: 'ibom'
+    comment: "Interactive HTML BOM"
+    type: ibom
+    dir: output/assembly
+    options:
+      output: '%p-ibom.html'
+
+  - name: 'pcb_top_pdf'
+    comment: "PCB top view (PDF)"
+    type: pcb_print
+    dir: output/pcb
+    options:
+      output: '%p-top.%x'
+      format: PDF
+    layers:
+      - layer: F.Cu
+      - layer: F.SilkS
+      - layer: F.Mask
+      - layer: Edge.Cuts
+
+  - name: 'pcb_bottom_pdf'
+    comment: "PCB bottom view (PDF)"
+    type: pcb_print
+    dir: output/pcb
+    options:
+      output: '%p-bottom.%x'
+      format: PDF
+      mirror: true
+    layers:
+      - layer: B.Cu
+      - layer: B.SilkS
+      - layer: B.Mask
+      - layer: Edge.Cuts
+
+  - name: 'step'
+    comment: "3D model (STEP format)"
+    type: step
+    dir: output/3d
+    options:
+      output: '%p.%x'
+
+  - name: 'vrml'
+    comment: "3D model (VRML format)"
+    type: vrml
+    dir: output/3d
+    options:
+      output: '%p.%x'

@@ -1,0 +1,38 @@
+name: KiBot
+
+on:
+  push:
+    paths:
+      - 'hardware/**.kicad_sch'
+      - 'hardware/**.kicad_pcb'
+      - 'hardware/**.kicad_pro'
+      - '.github/workflows/kibot.yml'
+      - '**.kibot.yaml'
+  pull_request:
+    paths:
+      - 'hardware/**.kicad_sch'
+      - 'hardware/**.kicad_pcb'
+      - 'hardware/**.kicad_pro'
+      - '.github/workflows/kibot.yml'
+      - '**.kibot.yaml'
+
+jobs:
+  KiBot:
+    runs-on: ubuntu-latest
+    container: ghcr.io/inti-cmnb/kicad8_auto_full:latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Run KiBot
+      run: |
+        cd hardware
+        kibot -e "24vled-esp32c6.kicad_sch" -b "24vled-esp32c6.kicad_pcb" -c "../config.kibot.yaml"
+
+    - name: Upload artifacts
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: KiBot-outputs
+        path: hardware/output/
