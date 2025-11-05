@@ -6,6 +6,14 @@ preflight:
   drc: true
   check_zone_fills: true
 
+filters:
+  - name: only_jlc_parts
+    comment: 'Only parts with LCSC field'
+    type: generic
+    include_only:
+      - column: 'LCSC'
+        regex: '^C\d+'
+
 outputs:
   # Schematic outputs
   - name: 'schematic_pdf'
@@ -55,21 +63,48 @@ outputs:
       output: '%p-drill.%x'
 
   - name: 'position'
-    comment: "Pick and place file"
+    comment: "Pick and place file, JLC style"
     type: position
     dir: output/assembly
     options:
       format: CSV
+      units: millimeters
       separate_files_for_front_and_back: false
-      output: '%p-position.%x'
+      only_smd: true
+      output: '%f_cpl_jlc.%x'
+      columns:
+        - id: Ref
+          name: Designator
+        - Val
+        - Package
+        - id: PosX
+          name: "Mid X"
+        - id: PosY
+          name: "Mid Y"
+        - id: Rot
+          name: Rotation
+        - id: Side
+          name: Layer
 
   - name: 'bom'
-    comment: "Bill of Materials"
+    comment: "BoM for JLC"
     type: bom
     dir: output/bom
     options:
-      output: '%p-bom.%x'
-      format: CSV
+      output: '%f_bom_jlc.%x'
+      ref_separator: ','
+      columns:
+        - field: Value
+          name: Comment
+        - field: References
+          name: Designator
+        - Footprint
+        - field: 'LCSC'
+          name: 'LCSC Part Number'
+      csv:
+        hide_pcb_info: true
+        hide_stats_info: true
+        quote_all: true
 
   - name: 'ibom'
     comment: "Interactive HTML BOM"
