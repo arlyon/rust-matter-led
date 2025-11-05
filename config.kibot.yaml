@@ -60,6 +60,7 @@ outputs:
     dir: output/assembly
     options:
       format: CSV
+      separate_files_for_front_and_back: false
       output: '%p-position.%x'
 
   - name: 'bom'
