@@ -1396,14 +1396,13 @@
 			)
 		)
 	)
-	(footprint "Library:industries_10mm"
+	(footprint "Internal:industries_10mm"
 		(layer "F.Cu")
 		(uuid "2fcf09b2-65bc-4d25-b9f9-483e7e5657f5")
 		(at 151.1 112.5)
 		(property "Reference" "G***"
 			(at 0 0 0)
 			(layer "F.SilkS")
-			(hide yes)
 			(uuid "58dbd371-535d-49d1-9f42-e9e2e1eb82b2")
 			(effects
 				(font
@@ -1837,7 +1836,7 @@
 			)
 			(fill yes)
 			(layer "F.SilkS")
-			(uuid "67f37238-a7e9-40ac-bd4f-ab407eefff88")
+			(uuid "d185c929-2124-4057-a54a-6d811de3c693")
 		)
 		(embedded_fonts no)
 	)

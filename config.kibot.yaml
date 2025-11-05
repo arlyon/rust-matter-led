@@ -85,11 +85,12 @@ outputs:
     options:
       output: '%p-top.%x'
       format: PDF
-    layers:
-      - layer: F.Cu
-      - layer: F.SilkS
-      - layer: F.Mask
-      - layer: Edge.Cuts
+      pages:
+        - layers:
+            - layer: F.Cu
+            - layer: F.SilkS
+            - layer: F.Mask
+            - layer: Edge.Cuts
 
   - name: 'pcb_bottom_pdf'
     comment: "PCB bottom view (PDF)"
@@ -98,12 +99,13 @@ outputs:
     options:
       output: '%p-bottom.%x'
       format: PDF
-      mirror: true
-    layers:
-      - layer: B.Cu
-      - layer: B.SilkS
-      - layer: B.Mask
-      - layer: Edge.Cuts
+      pages:
+        - layers:
+            - layer: B.Cu
+            - layer: B.SilkS
+            - layer: B.Mask
+            - layer: Edge.Cuts
+          mirror: true
 
   - name: 'step'
     comment: "3D model (STEP format)"
