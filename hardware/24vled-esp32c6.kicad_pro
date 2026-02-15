@@ -38,8 +38,8 @@
         "other_text_upright": false,
         "pads": {
           "drill": 3.2,
-          "height": 5.0,
-          "width": 5.0
+          "height": 3.2,
+          "width": 3.2
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -52,12 +52,7 @@
         }
       },
       "diff_pair_dimensions": [],
-      "drc_exclusions": [
-        [
-          "copper_edge_clearance|150800000|130950000|6d0f1433-d889-4135-84b7-9cf2c57e9107|64c75cc6-1084-4156-a835-ec0dedf593bc",
-          ""
-        ]
-      ],
+      "drc_exclusions": [],
       "meta": {
         "version": 2
       },
