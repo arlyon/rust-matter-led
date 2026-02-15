@@ -7757,7 +7757,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C22452"
+		(property "LCSC" "C211777"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
