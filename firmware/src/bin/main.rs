@@ -23,7 +23,11 @@ use rs_matter::{
 };
 
 use embassy_executor::Spawner;
-use esp_hal::{clock::CpuClock, gpio::Io, timer::timg::TimerGroup};
+use esp_hal::{
+    clock::CpuClock,
+    gpio::{Input, Io, Pull},
+    timer::timg::TimerGroup,
+};
 
 use esp_backtrace as _;
 use esp_println as _;
@@ -51,7 +55,35 @@ const BUMP_SIZE: usize = 65536; // 64KB for Matter stack operations (certificate
 // Adjust size based on testing, Matter + TCP/IP + BLE + PWM can be memory intensive.
 const HEAP_SIZE: usize = 200 * 1024; // Start with 200KB, adjust as needed
 
+// Storage configuration (must match between boot cycles)
+const STORAGE_START: u32 = 0x9000; // Start at a safe offset in flash
+const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
+
 esp_bootloader_esp_idf::esp_app_desc!();
+
+/// Factory reset: erase the Matter storage and reboot
+async fn factory_reset(mut flash: BlockingFlashStorage<'_>) {
+    use embedded_storage::nor_flash::NorFlash as _;
+
+    defmt::warn!("Factory reset initiated!");
+    defmt::info!(
+        "Erasing flash storage from 0x{:x} to 0x{:x}",
+        STORAGE_START,
+        STORAGE_START + STORAGE_SIZE
+    );
+
+    // Erase the storage area in sector-sized chunks
+    if let Err(e) = flash.0.erase(STORAGE_START, STORAGE_START + STORAGE_SIZE) {
+        defmt::error!("Failed to erase flash: {:?}", e);
+    } else {
+        defmt::info!("Flash erased successfully!");
+    }
+
+    defmt::info!("Rebooting in 2 seconds...");
+    embassy_time::Timer::after(embassy_time::Duration::from_secs(2)).await;
+
+    esp_hal::system::software_reset();
+}
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -59,10 +91,21 @@ async fn main(spawner: Spawner) -> ! {
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-    let _io = Io::new(peripherals.IO_MUX);
+    let io = Io::new(peripherals.IO_MUX);
 
     // Initialize Heap
     heap_allocator!(size: HEAP_SIZE);
+
+    // Check if BOOT button (GPIO9) is held down for factory reset
+    let boot_button = Input::new(
+        peripherals.GPIO9,
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    );
+    let factory_reset_requested = boot_button.is_low();
+
+    if factory_reset_requested {
+        defmt::warn!("BOOT button held - Factory reset will be performed after initialization");
+    }
 
     // Initialize Embassy Timer Driver
     let timg0 = TimerGroup::new(peripherals.TIMG0);
@@ -166,12 +209,17 @@ async fn main(spawner: Spawner) -> ! {
 
     let storage = esp_storage::FlashStorage::new(peripherals.FLASH);
     let storage = BlockingFlashStorage(storage);
+
+    // Handle factory reset if BOOT button was held during startup
+    if factory_reset_requested {
+        factory_reset(storage).await;
+        unreachable!();
+    }
+
     // sequential-storage requires:
     // - Start/end aligned to ERASE_SIZE (4096 bytes for ESP32)
     // - At least 2 sectors (8192 bytes minimum)
     // Using 32 sectors (128KB) for Matter key-value storage (fabrics, certs, ACLs, etc.)
-    const STORAGE_START: u32 = 0x9000; // Start at a safe offset in flash
-    const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
     let kv_store = EmbassyKvBlobStore::new(storage, STORAGE_START..(STORAGE_START + STORAGE_SIZE));
 
     // Persistence (Dummy for now)

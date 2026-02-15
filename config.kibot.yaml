@@ -62,8 +62,8 @@ outputs:
     options:
       output: '%p-drill.%x'
 
-  - name: 'position'
-    comment: "Pick and place file, JLC style"
+  - name: 'position_jlc'
+    comment: "Pick and place file for JLC (SMD only)"
     type: position
     dir: output/assembly
     options:
@@ -85,6 +85,17 @@ outputs:
           name: Rotation
         - id: Side
           name: Layer
+
+  - name: 'position_all'
+    comment: "Complete pick and place file (all components)"
+    type: position
+    dir: output/assembly
+    options:
+      format: CSV
+      units: millimeters
+      separate_files_for_front_and_back: false
+      only_smd: false
+      output: '%f_position_all.%x'
 
   - name: 'bom'
     comment: "BoM for JLC"

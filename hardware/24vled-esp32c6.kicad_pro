@@ -37,9 +37,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.8,
-          "height": 1.27,
-          "width": 2.54
+          "drill": 1.2,
+          "height": 1.8,
+          "width": 1.8
         },
         "silk_line_width": 0.1,
         "silk_text_italic": false,
@@ -481,7 +481,7 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 0,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 10.0,
+        "track_width": 5.0,
         "via_diameter": 3.0,
         "via_drill": 3.0
       },
@@ -507,6 +507,10 @@
       {
         "netclass": "10A",
         "pattern": "+24V"
+      },
+      {
+        "netclass": "10A",
+        "pattern": "/V_IN"
       }
     ]
   },
