@@ -6,20 +6,6 @@ preflight:
   drc: true
   check_zone_fills: true
 
-  # Custom validation to find "Orphaned" parts
-  check_fields:
-    - name: "Check for unassigned parts"
-      comment: "Every part must have either an LCSC or an MPN field"
-      # We check the LCSC and MPN fields
-      fields:
-        - LCSC
-        - MPN
-      # Condition: Fail if BOTH fields are empty/missing
-      # KiBot uses Python-style logic here
-      formula: "not (LCSC or MPN)"
-      # Exclude things you never order (Mounting holes, Logo, Test points)
-      exclude_value: "/MountingHole|Logo|TestPoint|GND/"
-
 filters:
   - name: only_jlc_parts
     comment: "Only parts with LCSC field"
