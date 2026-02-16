@@ -12,13 +12,13 @@ filters:
     type: generic
     include_only:
       - column: "LCSC"
-        regex: '^C\d+'
+        regex: ".+"
   - name: exclude_jlc_parts
     comment: "Exclude parts with LCSC field"
     type: generic
     exclude_any:
       - column: "LCSC"
-        regex: '^C\d+'
+        regex: ".+"
 
 outputs:
   # Schematic outputs

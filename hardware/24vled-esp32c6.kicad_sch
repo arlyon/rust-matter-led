@@ -5123,6 +5123,24 @@
 				(hide yes)
 			)
 		)
+		(property "MPN" "0297010.WXNV"
+			(at 44.45 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" ""
+			(at 44.45 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "2"
 			(uuid "05182062-5cc4-455c-848c-9d4549748809")
 		)
