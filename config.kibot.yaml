@@ -167,7 +167,7 @@ outputs:
     type: ibom
     dir: output/assembly
     options:
-      extra_fields: ["LCSC", "MPN"] # Show these in the web view
+      extra_fields: "LCSC,MPN"
       output: "%p-ibom.html"
 
   - name: "pcb_top_pdf"
