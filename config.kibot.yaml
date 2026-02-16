@@ -127,8 +127,8 @@ outputs:
     comment: "BoM for Digikey and Mouser"
     type: bom
     dir: output/bom
-    filter: exclude_jlc_parts
     options:
+      filter: exclude_jlc_parts
       output: "%f_bom_mouser_digikey.%x"
       ref_separator: ","
       columns:
@@ -145,8 +145,8 @@ outputs:
     comment: "BOM formatted for 1-click Octopart import"
     type: bom
     dir: output/bom
-    filter: exclude_jlc_parts # Keep only your manual-buy THT parts
     options:
+      filter: exclude_jlc_parts
       output: "%f_bom_octopart.%x"
       # Octopart recognizes 'mpn' and 'quantity' headers automatically
       columns:
