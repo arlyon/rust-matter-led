@@ -6,32 +6,52 @@ preflight:
   drc: true
   check_zone_fills: true
 
+  # Custom validation to find "Orphaned" parts
+  check_fields:
+    - name: "Check for unassigned parts"
+      comment: "Every part must have either an LCSC or an MPN field"
+      # We check the LCSC and MPN fields
+      fields:
+        - LCSC
+        - MPN
+      # Condition: Fail if BOTH fields are empty/missing
+      # KiBot uses Python-style logic here
+      formula: "not (LCSC or MPN)"
+      # Exclude things you never order (Mounting holes, Logo, Test points)
+      exclude_value: "/MountingHole|Logo|TestPoint|GND/"
+
 filters:
   - name: only_jlc_parts
-    comment: 'Only parts with LCSC field'
+    comment: "Only parts with LCSC field"
     type: generic
     include_only:
-      - column: 'LCSC'
+      - column: "LCSC"
+        regex: '^C\d+'
+  - name: exclude_jlc_parts
+    comment: "Exclude parts with LCSC field"
+    type: generic
+    exclude_any:
+      - column: "LCSC"
         regex: '^C\d+'
 
 outputs:
   # Schematic outputs
-  - name: 'schematic_pdf'
+  - name: "schematic_pdf"
     comment: "Print schematic (PDF)"
     type: pdf_sch_print
     dir: output/schematics
     options:
-      output: '%p-Schematic.%x'
+      output: "%p-Schematic.%x"
 
-  - name: 'schematic_svg'
+  - name: "schematic_svg"
     comment: "Print schematic (SVG)"
     type: svg_sch_print
     dir: output/schematics
     options:
-      output: '%p-Schematic.%x'
+      output: "%p-Schematic.%x"
 
   # PCB outputs
-  - name: 'gerbers'
+  - name: "gerbers"
     comment: "Gerber files"
     type: gerber
     dir: output/gerbers
@@ -55,14 +75,14 @@ outputs:
       - layer: Edge.Cuts
         suffix: Edge_Cuts
 
-  - name: 'drill'
+  - name: "drill"
     comment: "Drill files"
     type: excellon
     dir: output/gerbers
     options:
-      output: '%p-drill.%x'
+      output: "%p-drill.%x"
 
-  - name: 'position_jlc'
+  - name: "position_jlc"
     comment: "Pick and place file for JLC (SMD only)"
     type: position
     dir: output/assembly
@@ -71,7 +91,7 @@ outputs:
       units: millimeters
       separate_files_for_front_and_back: false
       only_smd: true
-      output: '%f_cpl_jlc.%x'
+      output: "%f_cpl_jlc.%x"
       columns:
         - id: Ref
           name: Designator
@@ -86,7 +106,7 @@ outputs:
         - id: Side
           name: Layer
 
-  - name: 'position_all'
+  - name: "position_all"
     comment: "Complete pick and place file (all components)"
     type: position
     dir: output/assembly
@@ -95,41 +115,81 @@ outputs:
       units: millimeters
       separate_files_for_front_and_back: false
       only_smd: false
-      output: '%f_position_all.%x'
+      output: "%f_position_all.%x"
 
-  - name: 'bom'
+  - name: "bom"
     comment: "BoM for JLC"
     type: bom
     dir: output/bom
     options:
-      output: '%f_bom_jlc.%x'
-      ref_separator: ','
+      output: "%f_bom_jlc.%x"
+      ref_separator: ","
       columns:
         - field: Value
           name: Comment
         - field: References
           name: Designator
         - Footprint
-        - field: 'LCSC'
-          name: 'LCSC Part Number'
+        - field: "LCSC"
+          name: "LCSC Part Number"
       csv:
         hide_pcb_info: true
         hide_stats_info: true
         quote_all: true
 
-  - name: 'ibom'
+  - name: bom_manual
+    comment: "BoM for Digikey and Mouser"
+    type: bom
+    dir: output/bom
+    filter: exclude_jlc_parts
+    options:
+      output: "%f_bom_mouser_digikey.%x"
+      ref_separator: ","
+      columns:
+        - Row
+        - Description
+        - Reference
+        - Qty
+        - Value
+        - MPN
+        - Footprint
+      group_by: [MPN]
+
+  - name: "bom_octopart"
+    comment: "BOM formatted for 1-click Octopart import"
+    type: bom
+    dir: output/bom
+    filter: exclude_jlc_parts # Keep only your manual-buy THT parts
+    options:
+      output: "%f_bom_octopart.%x"
+      # Octopart recognizes 'mpn' and 'quantity' headers automatically
+      columns:
+        - field: MPN
+          name: "mpn"
+        - field: Qty
+          name: "quantity"
+        - field: Reference
+          name: "designator"
+        - field: Value
+          name: "description"
+      csv:
+        hide_pcb_info: true
+        hide_stats_info: true
+
+  - name: "ibom"
     comment: "Interactive HTML BOM"
     type: ibom
     dir: output/assembly
     options:
-      output: '%p-ibom.html'
+      extra_fields: ["LCSC", "MPN"] # Show these in the web view
+      output: "%p-ibom.html"
 
-  - name: 'pcb_top_pdf'
+  - name: "pcb_top_pdf"
     comment: "PCB top view (PDF)"
     type: pcb_print
     dir: output/pcb
     options:
-      output: '%p-top.%x'
+      output: "%p-top.%x"
       format: PDF
       pages:
         - layers:
@@ -138,12 +198,12 @@ outputs:
             - layer: F.Mask
             - layer: Edge.Cuts
 
-  - name: 'pcb_bottom_pdf'
+  - name: "pcb_bottom_pdf"
     comment: "PCB bottom view (PDF)"
     type: pcb_print
     dir: output/pcb
     options:
-      output: '%p-bottom.%x'
+      output: "%p-bottom.%x"
       format: PDF
       pages:
         - layers:
@@ -153,16 +213,16 @@ outputs:
             - layer: Edge.Cuts
           mirror: true
 
-  - name: 'step'
+  - name: "step"
     comment: "3D model (STEP format)"
     type: step
     dir: output/3d
     options:
-      output: '%p.%x'
+      output: "%p.%x"
 
-  - name: 'vrml'
+  - name: "vrml"
     comment: "3D model (VRML format)"
     type: vrml
     dir: output/3d
     options:
-      output: '%p.%x'
+      output: "%p.%x"
