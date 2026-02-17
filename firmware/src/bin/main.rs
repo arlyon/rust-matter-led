@@ -5,6 +5,7 @@
     clippy::mem_forget,
     reason = "mem::forget is generally not safe to do with esp_hal types"
 )]
+#![feature(alloc_error_handler)]
 
 extern crate alloc;
 
@@ -22,10 +23,13 @@ use rs_matter::{
     pairing::{DiscoveryCapabilities, qr::QrTextType},
 };
 
+use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
+
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
     gpio::{Input, Io, Pull},
+    rng::Rng,
     timer::timg::TimerGroup,
 };
 
@@ -50,16 +54,43 @@ use firmware::led::pwm::{PwmConfig, init_pwm, pwm_task};
 use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 
 // Define Heap and Bump sizes
-const BUMP_SIZE: usize = 65536; // 64KB for Matter stack operations (certificates, TLV encoding, etc.)
+const BUMP_SIZE: usize = 32 * 1024; // 96KB for Matter stack operations (certificates, TLV encoding, etc.)
 // ESP32-C6 has unified RAM, so only one heap allocator needed.
 // Adjust size based on testing, Matter + TCP/IP + BLE + PWM can be memory intensive.
-const HEAP_SIZE: usize = 200 * 1024; // Start with 200KB, adjust as needed
+const HEAP_SIZE: usize = 200 * 1024; // 320KB
 
 // Storage configuration (must match between boot cycles)
-const STORAGE_START: u32 = 0x9000; // Start at a safe offset in flash
+const STORAGE_START: u32 = 0x400_000; // Start at a safe offset in flash
 const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
 
 esp_bootloader_esp_idf::esp_app_desc!();
+
+/// A wrapper to bridge esp-hal's RNG (rand_core 0.6.x) with rs_matter's requirement (rand_core 0.9.x).
+pub struct MatterRng(pub esp_hal::rng::Rng);
+
+impl rand_core::RngCore for MatterRng {
+    fn next_u32(&mut self) -> u32 {
+        // esp_hal::rng::Rng has a random() method that returns u32
+        self.0.random()
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        let mut buf = [0u8; 8];
+        self.fill_bytes(&mut buf);
+        u64::from_le_bytes(buf)
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        for chunk in dest.chunks_mut(4) {
+            let rand_val = self.0.random().to_le_bytes();
+            let len = chunk.len();
+            chunk.copy_from_slice(&rand_val[..len]);
+        }
+    }
+}
+
+// rs_matter requires this marker trait to accept the RNG
+impl rand_core::CryptoRng for MatterRng {}
 
 /// Factory reset: erase the Matter storage and reboot
 async fn factory_reset(mut flash: BlockingFlashStorage<'_>) {
@@ -85,13 +116,22 @@ async fn factory_reset(mut flash: BlockingFlashStorage<'_>) {
     esp_hal::system::software_reset();
 }
 
+#[alloc_error_handler]
+fn alloc_error(layout: core::alloc::Layout) -> ! {
+    defmt::panic!(
+        "OOM: alloc of {} bytes, align {}",
+        layout.size(),
+        layout.align()
+    );
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     defmt::info!("Starting Matter + Direct PWM example (ESP32-C6)...");
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-    let io = Io::new(peripherals.IO_MUX);
+    let _io = Io::new(peripherals.IO_MUX);
 
     // Initialize Heap
     heap_allocator!(size: HEAP_SIZE);
@@ -128,55 +168,39 @@ async fn main(spawner: Spawner) -> ! {
     .expect("Failed to initialize PWM");
 
     // Spawn the PWM Task
-    spawner.spawn(pwm_task(pwm_pins, period)).unwrap();
+    spawner.spawn(pwm_task(pwm_pins, period).unwrap());
     defmt::info!("Spawned PWM task");
 
-    // Initialize Wi-Fi/BLE Radio Controller
-    let init = esp_radio::init().expect("Failed to initialize radio controller");
-
-    // == Matter Stack Initialization ==
-    // Custom rand function for esp-hal
-    fn esp_rand(buf: &mut [u8]) {
-        // TODO: Implement proper random number generation using ESP32 hardware RNG
-        // For now, use a simple counter-based approach (NOT CRYPTOGRAPHICALLY SECURE)
-        static mut COUNTER: u32 = 0;
-        for byte in buf.iter_mut() {
-            unsafe {
-                COUNTER = COUNTER.wrapping_add(1);
-                *byte = (COUNTER & 0xFF) as u8;
-            }
-        }
-    }
-
-    let info: &'static _ = Box::leak(Box::new(BasicInfoConfig {
-        vid: TEST_VID,
-        pid: TEST_PID,
-        hw_ver: 1,
-        hw_ver_str: "1",
-        sw_ver: 1,
-        sw_ver_str: "1",
-        serial_no: "123456789",
-        product_name: "ACME Test",
-        vendor_name: "ACME",
-        device_name: "MyTest",
-        ..BasicInfoConfig::new()
-    }));
+    // ADD THIS: A small "settling" delay
+    defmt::info!("Radio controller init successful. Settling...");
+    // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
+    defmt::info!("settled");
 
     let stack =
         &*Box::leak(Box::new_uninit()).init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
-            &info,
-            BasicCommData {
-                discriminator: 0x0F00, // 12-bit value (0-4095)
-                password: 20202021,    // 27-bit passcode (must be formatted as 8 decimal digits)
-            },
-            &firmware::TestDevAtt(()),
+            &TEST_DEV_DET,
+            TEST_DEV_COMM,
+            &TEST_DEV_ATT,
             epoch,
-            esp_rand,
         ));
+
+    // Initialize the hardware RNG and wrap it to satisfy rs_matter's rand_core 0.9.x trait bounds
+    let hw_rng = Rng::new();
+    let matter_rng = MatterRng(hw_rng);
+
+    let crypto =
+        rs_matter::crypto::default_crypto::<embassy_sync::blocking_mutex::raw::NoopRawMutex, _>(
+            rs_matter_stack::rand::reseeding_csprng(matter_rng, 1000).unwrap(),
+            rs_matter::dm::devices::test::DAC_PRIVKEY,
+        );
+
+    use rs_matter::crypto::Crypto;
+
+    let mut weak_rand = crypto.weak_rand().unwrap();
 
     // == Matter Device Definition (Using custom OnOff logic) ==
     let on_off_handler = OnOffHandler::new_standalone(
-        Dataver::new_rand(stack.matter().rand()),
+        Dataver::new_rand(&mut weak_rand),
         LIGHT_ENDPOINT_ID,
         LedDeviceLogic, // Use our custom logic struct
     );
@@ -194,7 +218,7 @@ async fn main(spawner: Spawner) -> ! {
         .chain(
             // Add the mandatory Descriptor cluster
             EpClMatcher::new(Some(LIGHT_ENDPOINT_ID), Some(desc::DescHandler::CLUSTER.id)),
-            MatterAsync(desc::DescHandler::new(Dataver::new_rand(stack.matter().rand())).adapt()),
+            MatterAsync(desc::DescHandler::new(Dataver::new_rand(&mut weak_rand)).adapt()),
         );
 
     if !stack.matter().is_commissioned() {
@@ -224,19 +248,22 @@ async fn main(spawner: Spawner) -> ! {
 
     // Persistence (Dummy for now)
     let persist = stack
-        .create_persist_with_comm_window(kv_store)
+        .create_persist_with_comm_window(&crypto, kv_store)
         .await
         .unwrap();
 
     // == Run the Matter Stack ==
     defmt::info!("Running Matter stack...");
-    let matter = pin!(stack.run_coex(
+    let matter = Box::pin(stack.run_coex(
         EmbassyWifi::new(
             // C6 uses WIFI and BLE peripherals
-            EspWifiDriver::new(&init, peripherals.WIFI, peripherals.BT),
-            stack
+            EspWifiDriver::new(peripherals.WIFI, peripherals.BT),
+            weak_rand,
+            true,
+            stack,
         ),
         &persist,
+        &crypto,
         (NODE, handler), // Use the handler chain we built
         (),
     ));

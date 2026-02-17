@@ -1,7 +1,6 @@
 #![no_std]
 
 use rs_matter::{
-    dm::clusters::dev_att::{DataType, DevAttDataFetcher},
     error::{Error, ErrorCode},
 };
 
@@ -130,22 +129,3 @@ const CERT_DECLARATION: [u8; 541] = [
     0xa7, 0x11, 0xfc, 0xb7, 0x9b, 0x97, 0xe3, 0x97, 0xce, 0xda, 0x66, 0x7b, 0xae, 0x46, 0x4e, 0x2b,
     0xd3, 0xff, 0xdf, 0xc3, 0xcc, 0xed, 0x7a, 0xa8, 0xca, 0x5f, 0x4c, 0x1a, 0x7c,
 ];
-
-impl DevAttDataFetcher for TestDevAtt {
-    fn get_devatt_data(&self, data_type: DataType, data: &mut [u8]) -> Result<usize, Error> {
-        let src = match data_type {
-            DataType::CertDeclaration => &CERT_DECLARATION[..],
-            DataType::PAI => &PAI_CERT[..],
-            DataType::DAC => &DAC_CERT[..],
-            DataType::DACPubKey => &DAC_PUBKEY[..],
-            DataType::DACPrivKey => &DAC_PRIVKEY[..],
-        };
-        if src.len() <= data.len() {
-            let data = &mut data[0..src.len()];
-            data.copy_from_slice(src);
-            Ok(src.len())
-        } else {
-            Err(ErrorCode::BufferTooSmall.into())
-        }
-    }
-}
