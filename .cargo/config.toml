@@ -3,6 +3,7 @@ runner = "probe-rs run --chip=esp32c6 --preverify --always-print-stacktrace --no
 
 [env]
 DEFMT_LOG="info"
+ESP_HAL_CONFIG_FLIP_LINK = "true"
 
 [build]
 rustflags = [

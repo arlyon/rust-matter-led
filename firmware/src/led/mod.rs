@@ -1,6 +1,9 @@
 pub mod pwm;
+// pub mod ws2812;
 
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
+use esp_hal::gpio::Output;
 
 /// LED PWM state representing the current/target values for all channels
 #[derive(Clone, Copy, Debug, defmt::Format, PartialEq)]
@@ -36,5 +39,10 @@ impl LedPwmState {
 }
 
 /// Global LED state shared between Matter handlers and PWM task
-pub static LED_STATE: Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, LedPwmState> =
-    Mutex::new(LedPwmState::new());
+pub static LED_STATE: Mutex<CriticalSectionRawMutex, LedPwmState> = Mutex::new(LedPwmState::new());
+
+/// Global pointer to the LED Output pin.
+/// This allows `device.rs` (logic) to control the LED directly.
+/// It is wrapped in a Mutex for safe mutable access.
+pub static GLOBAL_LED_PIN: Mutex<CriticalSectionRawMutex, Option<Output<'static>>> =
+    Mutex::new(None);

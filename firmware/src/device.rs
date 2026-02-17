@@ -1,5 +1,6 @@
 use crate::clusters::*;
-use crate::led::{LedPwmState, LED_STATE};
+use crate::led::GLOBAL_LED_PIN;
+use crate::led::{LED_STATE, LedPwmState};
 use rs_matter::dm::Cluster;
 use rs_matter::dm::clusters::on_off::StartUpOnOffEnum;
 use rs_matter::error::Error as MatterError;
@@ -31,13 +32,13 @@ impl OnOffHooks for LedDeviceLogic {
     fn set_on_off(&self, on: bool) {
         defmt::info!("OnOff command received: {}", on);
         let new_state = if on {
-            // Define ON state (e.g., Warm White at 50%)
+            // Define ON state (RED at 100% to match example)
             LedPwmState {
-                r: 0,
+                r: 255,
                 g: 0,
                 b: 0,
                 cw: 0,
-                ww: 128,
+                ww: 0,
             }
         } else {
             LedPwmState::default()
@@ -49,6 +50,21 @@ impl OnOffHooks for LedDeviceLogic {
             defmt::info!("Set LED target state to: {:?}", new_state);
         } else {
             defmt::warn!("Could not acquire LED_STATE lock to set on/off");
+        }
+
+        // Direct write to GPIO
+        if let Ok(mut pin_guard) = GLOBAL_LED_PIN.try_lock() {
+            if let Some(pin) = pin_guard.as_mut() {
+                if on {
+                    pin.set_high();
+                } else {
+                    pin.set_low();
+                }
+            } else {
+                defmt::warn!("Could not acquire GLOBAL_LED_PIN lock");
+            }
+        } else {
+            defmt::warn!("Could not acquire GLOBAL_LED_PIN lock");
         }
     }
 

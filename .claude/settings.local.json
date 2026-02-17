@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustc:*)",
+      "Bash(cargo check:*)",
+      "Bash(DEFMT_LOG=debug cargo build:*)",
+      "Bash(SCCACHE_DISABLE=1 DEFMT_LOG=debug cargo build:*)",
+      "Bash(RUSTC_WRAPPER=\"\" DEFMT_LOG=debug cargo build:*)",
+      "Bash(tree:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "homeassistant"
+  ]
+}

@@ -6,29 +6,27 @@
     reason = "mem::forget is generally not safe to do with esp_hal types"
 )]
 #![feature(alloc_error_handler)]
+#![feature(type_alias_impl_trait)]
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use core::pin::pin;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use esp_alloc::heap_allocator;
 use esp_storage::{FlashStorage, FlashStorageError};
 use rs_matter::{
-    BasicCommData,
-    dm::{
-        clusters::{basic_info::BasicInfoConfig, on_off::HandlerAsyncAdaptor},
-        devices::test::{TEST_PID, TEST_VID},
-    },
+    dm::clusters::on_off::HandlerAsyncAdaptor,
     pairing::{DiscoveryCapabilities, qr::QrTextType},
 };
 
+use rs_matter::utils::init::InitMaybeUninit;
 use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
 
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
     gpio::{Input, Io, Pull},
+    ram,
     rng::Rng,
     timer::timg::TimerGroup,
 };
@@ -36,7 +34,6 @@ use esp_hal::{
 use esp_backtrace as _;
 use esp_println as _;
 
-use rs_matter_embassy::matter::utils::init::InitMaybeUninit;
 use rs_matter_embassy::wireless::esp::EspWifiDriver;
 use rs_matter_embassy::{epoch::epoch, wireless::EmbassyWifiMatterStack};
 use rs_matter_embassy::{
@@ -48,16 +45,18 @@ use rs_matter_embassy::{
     persist::EmbassyKvBlobStore,
 };
 
+use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_metadata_generated::memory_range;
 use firmware::clusters::*;
 use firmware::device::LedDeviceLogic;
-use firmware::led::pwm::{PwmConfig, init_pwm, pwm_task};
 use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 
-// Define Heap and Bump sizes
-const BUMP_SIZE: usize = 32 * 1024; // 96KB for Matter stack operations (certificates, TLV encoding, etc.)
-// ESP32-C6 has unified RAM, so only one heap allocator needed.
-// Adjust size based on testing, Matter + TCP/IP + BLE + PWM can be memory intensive.
-const HEAP_SIZE: usize = 200 * 1024; // 320KB
+// we can reclaim RAM from the bootloader!!!
+const RECLAIMED_RAM: usize =
+    memory_range!("DRAM2_UNINIT").end - memory_range!("DRAM2_UNINIT").start;
+
+const BUMP_SIZE: usize = 64 * 1024;
+const HEAP_SIZE: usize = 240 * 1024;
 
 // Storage configuration (must match between boot cycles)
 const STORAGE_START: u32 = 0x400_000; // Start at a safe offset in flash
@@ -65,8 +64,10 @@ const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-/// A wrapper to bridge esp-hal's RNG (rand_core 0.6.x) with rs_matter's requirement (rand_core 0.9.x).
 pub struct MatterRng(pub esp_hal::rng::Rng);
+
+static STATIC_CELL: static_cell::StaticCell<EmbassyWifiMatterStack<BUMP_SIZE, ()>> =
+    static_cell::StaticCell::new();
 
 impl rand_core::RngCore for MatterRng {
     fn next_u32(&mut self) -> u32 {
@@ -134,7 +135,8 @@ async fn main(spawner: Spawner) -> ! {
     let _io = Io::new(peripherals.IO_MUX);
 
     // Initialize Heap
-    heap_allocator!(size: HEAP_SIZE);
+    heap_allocator!(size: HEAP_SIZE - RECLAIMED_RAM);
+    heap_allocator!(#[ram(reclaimed)] size: RECLAIMED_RAM);
 
     // Check if BOOT button (GPIO9) is held down for factory reset
     let boot_button = Input::new(
@@ -155,29 +157,21 @@ async fn main(spawner: Spawner) -> ! {
 
     defmt::info!("Embassy initialized!");
 
-    // --- PWM Initialization ---
-    let (pwm_pins, period) = init_pwm(
-        peripherals.MCPWM0,
-        PwmConfig::default(),
-        peripherals.GPIO3,  // R
-        peripherals.GPIO2,  // G
-        peripherals.GPIO10, // B
-        peripherals.GPIO1,  // CW
-        peripherals.GPIO0,  // WW
-    )
-    .expect("Failed to initialize PWM");
-
-    // Spawn the PWM Task
-    spawner.spawn(pwm_task(pwm_pins, period).unwrap());
-    defmt::info!("Spawned PWM task");
+    // --- Smart LED Initialization ---
+    // --- LED Initialization ---
+    // Simple GPIO control
+    let pin = Output::new(peripherals.GPIO15, Level::Low, OutputConfig::default());
+    *firmware::led::GLOBAL_LED_PIN.lock().await = Some(pin);
+    defmt::info!("Initialized LED Pin");
 
     // ADD THIS: A small "settling" delay
     defmt::info!("Radio controller init successful. Settling...");
     // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
     defmt::info!("settled");
 
-    let stack =
-        &*Box::leak(Box::new_uninit()).init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
+    let stack = STATIC_CELL
+        .uninit()
+        .init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
             &TEST_DEV_DET,
             TEST_DEV_COMM,
             &TEST_DEV_ATT,
@@ -254,7 +248,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // == Run the Matter Stack ==
     defmt::info!("Running Matter stack...");
-    let matter = Box::pin(stack.run_coex(
+    let matter = pin!(stack.run_coex(
         EmbassyWifi::new(
             // C6 uses WIFI and BLE peripherals
             EspWifiDriver::new(peripherals.WIFI, peripherals.BT),
