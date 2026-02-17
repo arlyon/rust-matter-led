@@ -19,6 +19,8 @@ use rs_matter::{
     pairing::{DiscoveryCapabilities, qr::QrTextType},
 };
 
+use esp_alloc::HEAP;
+
 use rs_matter::utils::init::InitMaybeUninit;
 use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
 
@@ -55,11 +57,12 @@ use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 const RECLAIMED_RAM: usize =
     memory_range!("DRAM2_UNINIT").end - memory_range!("DRAM2_UNINIT").start;
 
-const BUMP_SIZE: usize = 64 * 1024;
-const HEAP_SIZE: usize = 240 * 1024;
+const BUMP_SIZE: usize = 24 * 1024; //  typical peak is about 16kb
+const HEAP_SIZE: usize = 112 * 1024; // typical peak is about 72kb
 
 // Storage configuration (must match between boot cycles)
-const STORAGE_START: u32 = 0x400_000; // Start at a safe offset in flash
+// we have 8MB flash, so lets 'reserve' the last 1MB for the storage
+const STORAGE_START: u32 = 0x700_000; // Start at a safe offset in flash
 const STORAGE_SIZE: u32 = 32 * 4096; // 32 sectors = 128KB
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -214,16 +217,6 @@ async fn main(spawner: Spawner) -> ! {
             EpClMatcher::new(Some(LIGHT_ENDPOINT_ID), Some(desc::DescHandler::CLUSTER.id)),
             MatterAsync(desc::DescHandler::new(Dataver::new_rand(&mut weak_rand)).adapt()),
         );
-
-    if !stack.matter().is_commissioned() {
-        let matter = stack.matter();
-        matter
-            .print_standard_qr_code(QrTextType::Unicode, DiscoveryCapabilities::IP)
-            .unwrap();
-        defmt::info!("ready to commission");
-    } else {
-        defmt::info!("commissioned already");
-    }
 
     let storage = esp_storage::FlashStorage::new(peripherals.FLASH);
     let storage = BlockingFlashStorage(storage);

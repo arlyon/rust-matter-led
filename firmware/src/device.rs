@@ -31,6 +31,8 @@ impl OnOffHooks for LedDeviceLogic {
 
     fn set_on_off(&self, on: bool) {
         defmt::info!("OnOff command received: {}", on);
+        defmt::info!("Heap Stats: {}", esp_alloc::HEAP.stats());
+
         let new_state = if on {
             // Define ON state (RED at 100% to match example)
             LedPwmState {
