@@ -26,11 +26,12 @@ overflow-checks  = false
 rs-matter = { path = "../rs-matter/rs-matter" }
 
 # update to embedded-io 0.7 in embassy sync
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "62ed44f99af9e33d689c8308149f8f992176895f" }
-# embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "62ed44f99af9e33d689c8308149f8f992176895f" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "62ed44f99af9e33d689c8308149f8f992176895f" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "62ed44f99af9e33d689c8308149f8f992176895f" }
-embassy-time-driver = { git = "https://github.com/embassy-rs/embassy.git", rev = "62ed44f99af9e33d689c8308149f8f992176895f" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
+embassy-net-driver = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
+embassy-time-driver = { git = "https://github.com/embassy-rs/embassy.git", rev = "5dd8511a87096f664ca486c8a3c637367a15419a" }
 
 # esp-hal crates
 esp-rom-sys = { git = "https://github.com/esp-rs/esp-hal.git", rev = "d7e307beeeb3a2aa72200f8fff3902869ef50896" }
