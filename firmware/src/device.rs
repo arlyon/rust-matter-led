@@ -2,7 +2,6 @@ use crate::clusters::*;
 use crate::led::GLOBAL_LED_PIN;
 use crate::led::{LED_STATE, LedPwmState};
 use rs_matter::dm::Cluster;
-use rs_matter::dm::clusters::on_off::StartUpOnOffEnum;
 use rs_matter::error::Error as MatterError;
 use rs_matter::tlv::Nullable;
 
@@ -70,12 +69,15 @@ impl OnOffHooks for LedDeviceLogic {
         }
     }
 
-    fn start_up_on_off(&self) -> Nullable<StartUpOnOffEnum> {
+    fn start_up_on_off(&self) -> Nullable<on_off::StartUpOnOffEnum> {
         // Return null to indicate we don't support startup on/off configuration
         Nullable::none()
     }
 
-    fn set_start_up_on_off(&self, _value: Nullable<StartUpOnOffEnum>) -> Result<(), MatterError> {
+    fn set_start_up_on_off(
+        &self,
+        _value: Nullable<on_off::StartUpOnOffEnum>,
+    ) -> Result<(), MatterError> {
         // We don't support configuring startup behavior, but return Ok to not cause errors
         Ok(())
     }
@@ -88,4 +90,95 @@ impl OnOffHooks for LedDeviceLogic {
         // You could implement fade effects here based on the effect parameter
         self.set_on_off(false);
     }
+}
+
+use crate::clusters::identify::IdentifyHooks;
+
+impl IdentifyHooks for LedDeviceLogic {
+    fn on_identify(&self, time: u16) {
+        defmt::info!("Identify command received: {} seconds", time);
+        if time > 0 {
+            // Blink the LED for identification
+            // Since we don't have a background task for this yet, we just log it
+            // Real implementation would likely start a blinking task or similar
+            // For now, let's just toggle it once if it's off
+            if !Self::get_current_on_off() {
+                self.set_on_off(true);
+            }
+        }
+    }
+}
+
+use crate::clusters::color_control::ColorControlHooks;
+
+impl ColorControlHooks for LedDeviceLogic {
+    fn on_color_control(&self, hue: u8, saturation: u8, temp: u16) {
+        defmt::info!("Color Control: H={}, S={}, T={}", hue, saturation, temp);
+
+        // Convert HSV to RGB
+        let (r, g, b) = hsv_to_rgb(hue, saturation, 255);
+
+        // Convert Color Temp to CW/WW
+        let (cw, ww) = if temp > 0 {
+            mireds_to_cwww(temp)
+        } else {
+            (0, 0)
+        };
+
+        let new_state = LedPwmState { r, g, b, cw, ww };
+
+        // Update the LED state
+        if let Ok(mut state_guard) = LED_STATE.try_lock() {
+            *state_guard = new_state;
+            defmt::info!("Set LED color state to: {:?}", new_state);
+        }
+    }
+}
+
+fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
+    let h_deg = (h as u16 * 360) / 254;
+    let s_float = s as f32 / 254.0;
+    let v_float = v as f32 / 255.0;
+
+    let c = v_float * s_float;
+    let x = c * (1.0 - ((h_deg as f32 / 60.0) % 2.0 - 1.0).abs());
+    let m = v_float - c;
+
+    let (r_prime, g_prime, b_prime) = if h_deg < 60 {
+        (c, x, 0.0)
+    } else if h_deg < 120 {
+        (x, c, 0.0)
+    } else if h_deg < 180 {
+        (0.0, c, x)
+    } else if h_deg < 240 {
+        (0.0, x, c)
+    } else if h_deg < 300 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    (
+        ((r_prime + m) * 255.0) as u8,
+        ((g_prime + m) * 255.0) as u8,
+        ((b_prime + m) * 255.0) as u8,
+    )
+}
+
+fn mireds_to_cwww(mireds: u16) -> (u8, u8) {
+    // Range 153 (Cool) to 500 (Warm)
+    const MIN_MIREDS: u16 = 153;
+    const MAX_MIREDS: u16 = 500;
+
+    let m = mireds.clamp(MIN_MIREDS, MAX_MIREDS);
+    let range = MAX_MIREDS - MIN_MIREDS;
+    let val = m - MIN_MIREDS;
+
+    // WW increases with mireds (warmer)
+    // Map 0..range to 0..255
+    let ww = ((val as u32 * 255) / range as u32) as u8;
+    // CW decreases with mireds
+    let cw = 255 - ww;
+
+    (cw, ww)
 }

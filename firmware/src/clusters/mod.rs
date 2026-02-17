@@ -8,6 +8,14 @@ pub use rs_matter_embassy::matter::dm::clusters::level_control::{
     FULL_CLUSTER as LEVEL_CONTROL_FULL_CLUSTER, LevelControlHandler, LevelControlHooks,
 };
 
-// rs_matter::import! {
-//     ColorControl,
-// }
+pub mod color_control;
+pub mod identify;
+pub use rs_matter::dm::clusters::level_control;
+pub use rs_matter::dm::clusters::on_off;
+
+mod decl {
+    rs_matter::import! {
+        ColorControl,
+        Identify,
+    }
+}

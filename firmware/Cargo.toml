@@ -16,6 +16,10 @@ name    = "hello_test"
 [lib]
 test = false
 
+[features]
+default = ["defmt"]
+defmt = []
+
 [dependencies]
 esp-hal = { version = "1", features = [
   "defmt",
@@ -73,7 +77,7 @@ rand_core        = "0.9"
 # rs-matter = { version = "0.1.1", git = "https://github.com/project-chip/rs-matter.git", default-features = false }
 rs-matter = { path = "../../rs-matter/rs-matter", default-features = false, features = ["defmt"] }
 rs-matter-embassy = { path = "../../rs-matter-embassy/rs-matter-embassy", features = ["embassy-net", "esp", "defmt"] }
-rs-matter-stack = { path = "../../rs-matter-stack", features = ["defmt", "kv-blob-store-16384"] }
+rs-matter-stack = { path = "../../rs-matter-stack", features = [ "defmt", "kv-blob-store-16384"] }
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 embedded-storage-async = "0.4.1"
 embedded-storage = "0.3.1"

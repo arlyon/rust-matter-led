@@ -14,12 +14,6 @@ use core::pin::pin;
 use embedded_storage_async::nor_flash::{ErrorType, NorFlash, ReadNorFlash};
 use esp_alloc::heap_allocator;
 use esp_storage::{FlashStorage, FlashStorageError};
-use rs_matter::{
-    dm::clusters::on_off::HandlerAsyncAdaptor,
-    pairing::{DiscoveryCapabilities, qr::QrTextType},
-};
-
-use esp_alloc::HEAP;
 
 use rs_matter::utils::init::InitMaybeUninit;
 use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
@@ -47,10 +41,11 @@ use rs_matter_embassy::{
     persist::EmbassyKvBlobStore,
 };
 
-use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_metadata_generated::memory_range;
+use firmware::clusters::color_control::ColorControlHandler;
 use firmware::clusters::*;
 use firmware::device::LedDeviceLogic;
+use firmware::led::pwm::{self, PwmConfig};
 use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 
 // we can reclaim RAM from the bootloader!!!
@@ -161,11 +156,22 @@ async fn main(spawner: Spawner) -> ! {
     defmt::info!("Embassy initialized!");
 
     // --- Smart LED Initialization ---
-    // --- LED Initialization ---
-    // Simple GPIO control
-    let pin = Output::new(peripherals.GPIO15, Level::Low, OutputConfig::default());
-    *firmware::led::GLOBAL_LED_PIN.lock().await = Some(pin);
-    defmt::info!("Initialized LED Pin");
+    // RGB CW WW PWM Initialization
+    // let pwm_config = PwmConfig::default();
+    // let (pwm_pins, period) = pwm::init_pwm(
+    //     peripherals.MCPWM0,
+    //     pwm_config,
+    //     peripherals.GPIO18, // R
+    //     peripherals.GPIO19, // G
+    //     peripherals.GPIO20, // B
+    //     peripherals.GPIO21, // CW
+    //     peripherals.GPIO22, // WW
+    // )
+    // .unwrap();
+
+    // spawner.spawn(firmware::led::pwm::pwm_task(pwm_pins, period).unwrap());
+
+    // defmt::info!("Initialized PWM LED Control");
 
     // ADD THIS: A small "settling" delay
     defmt::info!("Radio controller init successful. Settling...");
@@ -202,6 +208,14 @@ async fn main(spawner: Spawner) -> ! {
         LedDeviceLogic, // Use our custom logic struct
     );
 
+    let identify_handler = firmware::clusters::identify::IdentifyHandler::new(
+        Dataver::new_rand(&mut weak_rand),
+        LedDeviceLogic,
+    );
+
+    let color_control_handler =
+        ColorControlHandler::new(Dataver::new_rand(&mut weak_rand), LedDeviceLogic);
+
     // Chain clusters for the endpoint
     let handler = EmptyHandler
         .chain(
@@ -210,7 +224,21 @@ async fn main(spawner: Spawner) -> ! {
                 Some(LIGHT_ENDPOINT_ID),
                 Some(LedDeviceLogic::CLUSTER.id), // Use the cluster ID
             ),
-            HandlerAsyncAdaptor(&on_off_handler),
+            on_off_handler.adapt(),
+        )
+        .chain(
+            EpClMatcher::new(
+                Some(LIGHT_ENDPOINT_ID),
+                Some(firmware::clusters::identify::CLUSTER_ID),
+            ),
+            identify_handler.adapt(),
+        )
+        .chain(
+            EpClMatcher::new(
+                Some(LIGHT_ENDPOINT_ID),
+                Some(firmware::clusters::color_control::CLUSTER_ID),
+            ),
+            color_control_handler.adapt(),
         )
         .chain(
             // Add the mandatory Descriptor cluster

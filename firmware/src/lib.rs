@@ -1,9 +1,5 @@
 #![no_std]
 
-use rs_matter::{
-    error::{Error, ErrorCode},
-};
-
 pub mod clusters;
 pub mod device;
 pub mod led;
