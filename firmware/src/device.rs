@@ -109,6 +109,29 @@ impl IdentifyHooks for LedDeviceLogic {
     }
 }
 
+impl LevelControlHooks for LedDeviceLogic {
+    const MIN_LEVEL: u8 = 1;
+
+    const MAX_LEVEL: u8 = 254;
+
+    const FASTEST_RATE: u8 = 50;
+
+    const CLUSTER: Cluster<'static> = LEVEL_CONTROL_FULL_CLUSTER;
+
+    fn set_device_level(&self, level: u8) -> Result<Option<u8>, ()> {
+        defmt::info!("device level set to {}", level);
+        Ok(Some(level))
+    }
+
+    fn current_level(&self) -> Option<u8> {
+        return Some(0);
+    }
+
+    fn set_current_level(&self, level: Option<u8>) {
+        defmt::info!("level set to {}", level.unwrap());
+    }
+}
+
 use crate::clusters::color_control::ColorControlHooks;
 
 impl ColorControlHooks for LedDeviceLogic {

@@ -216,13 +216,24 @@ async fn main(spawner: Spawner) -> ! {
     let color_control_handler =
         ColorControlHandler::new(Dataver::new_rand(&mut weak_rand), LedDeviceLogic);
 
+    let level_control_handler = LevelControlHandler::new_standalone(
+        Dataver::new_rand(&mut weak_rand),
+        LIGHT_ENDPOINT_ID,
+        LedDeviceLogic,
+        Default::default(),
+    );
+
+    // TODO: figure this out, and use new instead of new_standalone
+    // on_off_handler.init(Some(&level_control_handler));
+    // level_control_handler.init(Some(&on_off_handler));
+
     // Chain clusters for the endpoint
     let handler = EmptyHandler
         .chain(
             EpClMatcher::new(
                 // Match OnOff cluster on our endpoint
                 Some(LIGHT_ENDPOINT_ID),
-                Some(LedDeviceLogic::CLUSTER.id), // Use the cluster ID
+                Some(firmware::clusters::ON_OFF_FULL_CLUSTER.id), // Use the cluster ID
             ),
             on_off_handler.adapt(),
         )
@@ -239,6 +250,13 @@ async fn main(spawner: Spawner) -> ! {
                 Some(firmware::clusters::color_control::CLUSTER_ID),
             ),
             color_control_handler.adapt(),
+        )
+        .chain(
+            EpClMatcher::new(
+                Some(LIGHT_ENDPOINT_ID),
+                Some(firmware::clusters::LEVEL_CONTROL_FULL_CLUSTER.id),
+            ),
+            level_control_handler.adapt(),
         )
         .chain(
             // Add the mandatory Descriptor cluster

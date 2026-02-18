@@ -13,7 +13,7 @@ pub mod identify;
 pub use rs_matter::dm::clusters::level_control;
 pub use rs_matter::dm::clusters::on_off;
 
-mod decl {
+pub mod decl {
     rs_matter::import! {
         ColorControl,
         Identify,
