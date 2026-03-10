@@ -16,7 +16,7 @@ use esp_alloc::heap_allocator;
 use esp_storage::{FlashStorage, FlashStorageError};
 
 use rs_matter::utils::init::InitMaybeUninit;
-use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_COMM, TEST_DEV_DET};
+use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_DET};
 
 use embassy_executor::Spawner;
 use esp_hal::{
@@ -178,11 +178,27 @@ async fn main(spawner: Spawner) -> ! {
     // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
     defmt::info!("settled");
 
+    // Get MAC address for unique identity
+    let mac = esp_hal::efuse::Efuse::mac_address();
+    defmt::info!(
+        "Device MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+        mac[0],
+        mac[1],
+        mac[2],
+        mac[3],
+        mac[4],
+        mac[5]
+    );
+
+    // Generate unique commissioning data based on MAC
+    let comm_data = firmware::matter::generate_commissioning_data(mac);
+    firmware::matter::log_pairing_info(comm_data.discriminator, firmware::matter::DEFAULT_PASSCODE);
+
     let stack = STATIC_CELL
         .uninit()
         .init_with(EmbassyWifiMatterStack::<BUMP_SIZE, ()>::init(
             &TEST_DEV_DET,
-            TEST_DEV_COMM,
+            comm_data,
             &TEST_DEV_ATT,
             epoch,
         ));
