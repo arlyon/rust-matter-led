@@ -1470,7 +1470,7 @@ dependencies = [
  "defmt 1.0.1",
  "document-features",
  "embassy-executor-macros",
- "embassy-executor-timer-queue 0.1.0 (git+https://github.com/embassy-rs/embassy.git?rev=5dd8511a87096f664ca486c8a3c637367a15419a)",
+ "embassy-executor-timer-queue",
 ]
 
 [[package]]
@@ -1483,12 +1483,6 @@ dependencies = [
  "quote",
  "syn 2.0.116",
 ]
-
-[[package]]
-name = "embassy-executor-timer-queue"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fc328bf943af66b80b98755db9106bf7e7471b0cf47dc8559cd9a6be504cc9c"
 
 [[package]]
 name = "embassy-executor-timer-queue"
@@ -1658,11 +1652,10 @@ dependencies = [
 [[package]]
 name = "embassy-time-queue-utils"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80e2ee86063bd028a420a5fb5898c18c87a8898026da1d4c852af2c443d0a454"
+source = "git+https://github.com/embassy-rs/embassy.git?rev=5dd8511a87096f664ca486c8a3c637367a15419a#5dd8511a87096f664ca486c8a3c637367a15419a"
 dependencies = [
- "embassy-executor-timer-queue 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "heapless 0.8.0",
+ "embassy-executor-timer-queue",
+ "heapless 0.9.2",
 ]
 
 [[package]]
@@ -1973,7 +1966,7 @@ dependencies = [
  "defmt 1.0.1",
  "document-features",
  "esp-config",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-println",
  "heapless 0.9.2",
  "riscv",
@@ -1990,7 +1983,7 @@ dependencies = [
  "embedded-storage",
  "esp-config",
  "esp-hal-procmacros",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-rom-sys",
  "jiff",
  "strum 0.27.2",
@@ -2002,7 +1995,7 @@ version = "0.6.1"
 source = "git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896#d7e307beeeb3a2aa72200f8fff3902869ef50896"
 dependencies = [
  "document-features",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "serde",
  "serde_yaml",
  "somni-expr",
@@ -2035,7 +2028,7 @@ dependencies = [
  "enumset",
  "esp-config",
  "esp-hal-procmacros",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-riscv-rt",
  "esp-rom-sys",
  "esp-sync",
@@ -2111,12 +2104,6 @@ dependencies = [
 [[package]]
 name = "esp-metadata-generated"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a93e39c8ad8d390d248dc7b9f4b59a873f313bf535218b8e2351356972399e3"
-
-[[package]]
-name = "esp-metadata-generated"
-version = "0.3.0"
 source = "git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896#d7e307beeeb3a2aa72200f8fff3902869ef50896"
 
 [[package]]
@@ -2129,7 +2116,7 @@ dependencies = [
  "document-features",
  "esp-config",
  "esp-hal",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-sync",
  "esp-wifi-sys-esp32c6",
 ]
@@ -2141,7 +2128,7 @@ source = "git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8f
 dependencies = [
  "defmt 1.0.1",
  "document-features",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-sync",
  "log",
  "portable-atomic",
@@ -2171,7 +2158,7 @@ dependencies = [
  "esp-config",
  "esp-hal",
  "esp-hal-procmacros",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-phy",
  "esp-radio-rtos-driver",
  "esp-sync",
@@ -2219,7 +2206,7 @@ source = "git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8f
 dependencies = [
  "cfg-if",
  "document-features",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
 ]
 
 [[package]]
@@ -2239,7 +2226,7 @@ dependencies = [
  "esp-config",
  "esp-hal",
  "esp-hal-procmacros",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-radio-rtos-driver",
  "esp-rom-sys",
  "esp-sync",
@@ -2258,7 +2245,7 @@ dependencies = [
  "embedded-storage",
  "esp-hal",
  "esp-hal-procmacros",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "esp-rom-sys",
  "esp-sync",
 ]
@@ -2273,7 +2260,7 @@ dependencies = [
  "document-features",
  "embassy-sync 0.6.2",
  "embassy-sync 0.7.2",
- "esp-metadata-generated 0.3.0 (git+https://github.com/esp-rs/esp-hal.git?rev=d7e307beeeb3a2aa72200f8fff3902869ef50896)",
+ "esp-metadata-generated",
  "riscv",
  "xtensa-lx",
 ]
@@ -2504,7 +2491,7 @@ dependencies = [
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-hal-smartled",
- "esp-metadata-generated 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "esp-metadata-generated",
  "esp-println",
  "esp-radio",
  "esp-rtos",
