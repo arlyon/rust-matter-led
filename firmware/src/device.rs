@@ -1,6 +1,6 @@
 use crate::clusters::*;
-use crate::led::GLOBAL_LED_PIN;
-use crate::led::{DEVICE_STATE, LedPwmState, TARGET_STATE, TargetState};
+use crate::led::{DEVICE_STATE, LedPwmState, TARGET_STATE, TargetState, hsv_to_rgb};
+use crate::led::{GLOBAL_LED_PIN, mireds_to_cwww};
 use rs_matter::dm::Cluster;
 use rs_matter::error::Error as MatterError;
 use rs_matter::tlv::Nullable;
@@ -168,52 +168,4 @@ impl ColorControlHooks for LedDeviceLogic {
             transition_duration_ms: 0,
         });
     }
-}
-
-fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
-    let h_deg = (h as u16 * 360) / 254;
-    let s_float = s as f32 / 254.0;
-    let v_float = v as f32 / 255.0;
-
-    let c = v_float * s_float;
-    let x = c * (1.0 - ((h_deg as f32 / 60.0) % 2.0 - 1.0).abs());
-    let m = v_float - c;
-
-    let (r_prime, g_prime, b_prime) = if h_deg < 60 {
-        (c, x, 0.0)
-    } else if h_deg < 120 {
-        (x, c, 0.0)
-    } else if h_deg < 180 {
-        (0.0, c, x)
-    } else if h_deg < 240 {
-        (0.0, x, c)
-    } else if h_deg < 300 {
-        (x, 0.0, c)
-    } else {
-        (c, 0.0, x)
-    };
-
-    (
-        ((r_prime + m) * 255.0) as u8,
-        ((g_prime + m) * 255.0) as u8,
-        ((b_prime + m) * 255.0) as u8,
-    )
-}
-
-fn mireds_to_cwww(mireds: u16) -> (u8, u8) {
-    // Range 154 (Cool) to 500 (Warm)
-    const MIN_MIREDS: u16 = 154;
-    const MAX_MIREDS: u16 = 500;
-
-    let m = mireds.clamp(MIN_MIREDS, MAX_MIREDS);
-    let range = MAX_MIREDS - MIN_MIREDS;
-    let val = m - MIN_MIREDS;
-
-    // WW increases with mireds (warmer)
-    // Map 0..range to 0..255
-    let ww = ((val as u32 * 255) / range as u32) as u8;
-    // CW decreases with mireds
-    let cw = 255 - ww;
-
-    (cw, ww)
 }

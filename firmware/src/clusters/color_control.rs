@@ -72,6 +72,9 @@ pub const CLUSTER: Cluster<'static> = Cluster::new(
             Access::RWVM,
             Quality::from_bits_truncate(Quality::N.bits() | Quality::X.bits()),
         ),
+        // --- XY Color Space (not supported, but stub to prevent errors) ---
+        rs_matter::dm::Attribute::new(AttributeId::CurrentX as u32, Access::RV, Quality::NONE),
+        rs_matter::dm::Attribute::new(AttributeId::CurrentY as u32, Access::RV, Quality::NONE),
     ],
     &[
         rs_matter::dm::Command::new(CommandId::StopMoveStep as u32, None, Access::NEED_OPERATE), // StopMoveStep
@@ -666,7 +669,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
-        Ok(154) // 6500K
+        Ok(153) // 6500K
     }
 
     async fn color_temp_physical_max_mireds(
@@ -689,5 +692,31 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         value: rs_matter::tlv::Nullable<u16>,
     ) -> Result<(), rs_matter::error::Error> {
         Ok(())
+    }
+
+    async fn remaining_time(
+        &self,
+        ctx: impl rs_matter::dm::ReadContext,
+    ) -> Result<u16, rs_matter::error::Error> {
+        // Return 0 when not animating
+        // TODO: Track actual animation progress in PWM task
+        Ok(0)
+    }
+
+    // XY Color Space attributes (not supported, return stub values)
+    async fn current_x(
+        &self,
+        ctx: impl rs_matter::dm::ReadContext,
+    ) -> Result<u16, rs_matter::error::Error> {
+        // Return 0 - XY not supported, use HSV instead
+        Ok(0)
+    }
+
+    async fn current_y(
+        &self,
+        ctx: impl rs_matter::dm::ReadContext,
+    ) -> Result<u16, rs_matter::error::Error> {
+        // Return 0 - XY not supported, use HSV instead
+        Ok(0)
     }
 }

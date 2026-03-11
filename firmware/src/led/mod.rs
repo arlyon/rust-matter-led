@@ -4,6 +4,7 @@ pub mod pwm;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_hal::gpio::Output;
+use palette::{FromColor, Hsv, Srgb, Xyz, white_point::D65};
 use sticky_signal::StickySignal;
 
 /// LED PWM state representing the current/target values for all channels
@@ -37,7 +38,7 @@ impl Default for DeviceState {
     fn default() -> Self {
         Self {
             on: false,
-            brightness: 254, // Default to full brightness
+            brightness: 254,        // Default to full brightness
             color_temp_mireds: 250, // ~4000K (neutral white)
             hue: 0,
             saturation: 0,
@@ -118,51 +119,47 @@ fn scale_brightness(value: u8, brightness: u32) -> u8 {
 }
 
 /// Convert color temperature in mireds to CW/WW duty cycles
-fn mireds_to_cwww(mireds: u16) -> (u8, u8) {
-    // Range 153 (Cool) to 500 (Warm)
+pub fn mireds_to_cwww(mireds: u16) -> (u8, u8) {
+    // Matter range: 153 mireds (~6500K cool) to 500 mireds (~2000K warm)
     const MIN_MIREDS: u16 = 153;
     const MAX_MIREDS: u16 = 500;
 
-    let m = mireds.clamp(MIN_MIREDS, MAX_MIREDS);
-    let range = MAX_MIREDS - MIN_MIREDS;
-    let val = m - MIN_MIREDS;
+    // Our LED color temperatures
+    const CW_KELVIN: f32 = 6500.0; // Cold white
+    const WW_KELVIN: f32 = 2000.0; // Warm white
 
-    // WW increases with mireds (warmer)
-    let ww = ((val as u32 * 255) / range as u32) as u8;
-    // CW decreases with mireds
-    let cw = 255 - ww;
+    let m = mireds.clamp(MIN_MIREDS, MAX_MIREDS);
+
+    // Convert mireds to Kelvin (K = 1,000,000 / mireds)
+    let target_kelvin = 1_000_000.0 / m as f32;
+
+    // Clamp to LED range and calculate linear interpolation in Kelvin space
+    // (more perceptually uniform than interpolating in mireds)
+    let target_k = target_kelvin.clamp(WW_KELVIN, CW_KELVIN);
+    let t = (target_k - WW_KELVIN) / (CW_KELVIN - WW_KELVIN);
+
+    let cw = (t * 255.0) as u8;
+    let ww = 255 - cw;
 
     (cw, ww)
 }
 
-/// Convert HSV to RGB
-fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
-    let h_deg = (h as u16 * 360) / 254;
-    let s_float = s as f32 / 254.0;
-    let v_float = v as f32 / 255.0;
+/// Convert HSV to RGB using the palette crate
+pub fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
+    // Convert Matter ranges (h: 0-254, s: 0-254, v: 0-255) to palette's expected ranges
+    let h_deg = (h as f32 * 360.0) / 254.0;
+    let s_norm = s as f32 / 254.0;
+    let v_norm = v as f32 / 255.0;
 
-    let c = v_float * s_float;
-    let x = c * (1.0 - ((h_deg as f32 / 60.0) % 2.0 - 1.0).abs());
-    let m = v_float - c;
+    // Create HSV color and convert to sRGB
+    let hsv = Hsv::new(h_deg, s_norm, v_norm);
+    let rgb = Srgb::from_color(hsv);
 
-    let (r_prime, g_prime, b_prime) = if h_deg < 60 {
-        (c, x, 0.0)
-    } else if h_deg < 120 {
-        (x, c, 0.0)
-    } else if h_deg < 180 {
-        (0.0, c, x)
-    } else if h_deg < 240 {
-        (0.0, x, c)
-    } else if h_deg < 300 {
-        (x, 0.0, c)
-    } else {
-        (c, 0.0, x)
-    };
-
+    // Convert to u8 values (0-255)
     (
-        ((r_prime + m) * 255.0) as u8,
-        ((g_prime + m) * 255.0) as u8,
-        ((b_prime + m) * 255.0) as u8,
+        (rgb.red * 255.0) as u8,
+        (rgb.green * 255.0) as u8,
+        (rgb.blue * 255.0) as u8,
     )
 }
 
@@ -170,15 +167,14 @@ fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
 pub static LED_STATE: Mutex<CriticalSectionRawMutex, LedPwmState> = Mutex::new(LedPwmState::new());
 
 /// Global semantic device state - tracks user intent (on/off, brightness, color temp, etc.)
-pub static DEVICE_STATE: Mutex<CriticalSectionRawMutex, DeviceState> =
-    Mutex::new(DeviceState {
-        on: false,
-        brightness: 254,
-        color_temp_mireds: 250,
-        hue: 0,
-        saturation: 0,
-        use_color_temp: true,
-    });
+pub static DEVICE_STATE: Mutex<CriticalSectionRawMutex, DeviceState> = Mutex::new(DeviceState {
+    on: false,
+    brightness: 254,
+    color_temp_mireds: 250,
+    hue: 0,
+    saturation: 0,
+    use_color_temp: true,
+});
 
 /// Sticky signal for target LED state - PWM animation task waits on this
 /// Supports up to 5 concurrent waiters (persistence task, PWM task, etc.)
