@@ -21,16 +21,10 @@ use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_DET};
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
-    gpio::{Input, Io, Level, OutputConfig, Pull},
-    ledc::{
-        Ledc, LowSpeed,
-        channel::{self, ChannelHW, ChannelIFace},
-        timer::{self, TimerIFace},
-    },
+    gpio::{Input, Io, Pull},
     peripherals::SW_INTERRUPT,
     ram,
     rng::Rng,
-    time::Rate,
     timer::timg::TimerGroup,
 };
 
@@ -161,54 +155,21 @@ async fn main(spawner: Spawner) -> ! {
 
     defmt::info!("Embassy initialized!");
 
-    // --- LEDC PWM Validation ---
-    // Initialize LEDC peripheral for basic hardware validation
-    // Red channel only (GPIO 1) with manual duty cycle stepping
-    defmt::info!("Initializing LEDC peripheral for Red channel validation...");
+    // Initialize LEDC for 5-channel LED control
+    let ledc_channels = firmware::led::pwm::init_ledc(
+        peripherals.LEDC,
+        peripherals.GPIO1,  // Red
+        peripherals.GPIO0,  // Green
+        peripherals.GPIO10, // Blue
+        peripherals.GPIO3,  // Cold White
+        peripherals.GPIO2,  // Warm White
+    );
 
-    let mut ledc = Ledc::new(peripherals.LEDC);
-    ledc.set_global_slow_clock(esp_hal::ledc::LSGlobalClkSource::APBClk);
+    // Spawn PWM task
+    spawner.spawn(firmware::led::pwm::pwm_task(ledc_channels).unwrap());
+    defmt::info!("PWM task spawned");
 
-    let mut timer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
-    timer0
-        .configure(timer::config::Config {
-            duty: timer::config::Duty::Duty10Bit,
-            clock_source: timer::LSClockSource::APBClk,
-            frequency: Rate::from_khz(20),
-        })
-        .unwrap();
-
-    let mut red_channel = ledc.channel(channel::Number::Channel0, peripherals.GPIO1);
-    red_channel
-        .configure(channel::config::Config {
-            timer: &timer0,
-            duty_pct: 0,
-            drive_mode: esp_hal::gpio::DriveMode::PushPull,
-        })
-        .unwrap();
-
-    defmt::info!("LEDC initialized: 20kHz, 10-bit resolution (0-1023)");
-    defmt::info!("Starting duty cycle validation sequence...");
-
-    let steps = [0, 337, 675, 1023, 675, 337];
-
-    loop {
-        for duty in steps {
-            let percent = (duty as u32 * 100) / 1023;
-            defmt::info!("Setting Red Duty: {} (~{}%)", duty, percent);
-            red_channel.set_duty_hw(duty);
-
-            let delay_start = embassy_time::Instant::now();
-            while delay_start.elapsed() < embassy_time::Duration::from_millis(500) {}
-
-            // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
-        }
-    }
-
-    // ADD THIS: A small "settling" delay
-    defmt::info!("Radio controller init successful. Settling...");
-    // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
-    defmt::info!("settled");
+    embassy_futures::yield_now().await;
 
     // Get MAC address for unique identity
     let mac = esp_hal::efuse::Efuse::mac_address();

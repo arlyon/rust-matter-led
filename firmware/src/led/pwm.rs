@@ -1,228 +1,219 @@
-use super::{LED_STATE, LedPwmState, TARGET_STATE, TargetState};
+use super::{LED_STATE, LedPwmState, TARGET_STATE};
+use embassy_futures::select::{select, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Ticker, Timer};
+use embassy_time::{Duration, Timer};
 use esp_hal::{
-    mcpwm::{
-        FrequencyError, McPwm, PeripheralClockConfig, operator::PwmPinConfig, timer::PwmWorkingMode,
+    ledc::{
+        LowSpeed,
+        channel::{self, ChannelHW, ChannelIFace},
+        timer::{self, TimerIFace},
     },
-    peripherals::MCPWM0,
+    peripherals::LEDC,
     time::Rate,
 };
+
+extern crate alloc;
+use alloc::boxed::Box;
 
 /// Signal to trigger identify sequence
 pub static IDENTIFY_SIGNAL: Signal<CriticalSectionRawMutex, u16> = Signal::new();
 
-/// PWM pin holder struct
-pub struct PwmPins {
-    pub pin_r: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 0, true>,
-    pub pin_g: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 0, false>,
-    pub pin_b: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 1, true>,
-    pub pin_cw: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 1, false>,
-    pub pin_ww: esp_hal::mcpwm::operator::PwmPin<'static, MCPWM0<'static>, 2, true>,
+/// PWM channels holder struct for LEDC
+pub struct LedcChannels {
+    pub ch_r: channel::Channel<'static, LowSpeed>,
+    pub ch_g: channel::Channel<'static, LowSpeed>,
+    pub ch_b: channel::Channel<'static, LowSpeed>,
+    pub ch_cw: channel::Channel<'static, LowSpeed>,
+    pub ch_ww: channel::Channel<'static, LowSpeed>,
 }
 
-/// Configuration for PWM initialization
-pub struct PwmConfig {
-    /// PWM frequency in kHz (e.g., 20 for 20kHz)
-    pub frequency_khz: u32,
-    /// PWM period (number of steps, e.g., 999 for 0-999 range)
-    pub period: u16,
-    /// Clock frequency in MHz (e.g., 32 for 32MHz)
-    pub clock_mhz: u32,
-}
-
-impl Default for PwmConfig {
-    fn default() -> Self {
-        Self {
-            frequency_khz: 20,
-            period: 999,
-            clock_mhz: 32,
-        }
-    }
-}
-
-/// Initialize MCPWM peripheral and return configured pins
-pub fn init_pwm(
-    mcpwm: MCPWM0<'static>,
-    config: PwmConfig,
+/// Initialize LEDC peripheral for 5-channel LED control
+/// Returns configured channels ready for PWM control
+pub fn init_ledc(
+    ledc: LEDC<'static>,
     pin_r: impl esp_hal::gpio::OutputPin + 'static,
     pin_g: impl esp_hal::gpio::OutputPin + 'static,
     pin_b: impl esp_hal::gpio::OutputPin + 'static,
     pin_cw: impl esp_hal::gpio::OutputPin + 'static,
     pin_ww: impl esp_hal::gpio::OutputPin + 'static,
-) -> Result<(PwmPins, u16), FrequencyError> {
-    defmt::info!("Initializing MCPWM...");
+) -> LedcChannels {
+    defmt::info!("Initializing LEDC for 5-channel LED control...");
 
-    let clock_cfg = PeripheralClockConfig::with_frequency(Rate::from_mhz(config.clock_mhz))?;
-    let mut mcpwm = McPwm::new(mcpwm, clock_cfg);
+    let mut ledc = esp_hal::ledc::Ledc::new(ledc);
+    ledc.set_global_slow_clock(esp_hal::ledc::LSGlobalClkSource::APBClk);
 
-    // Configure timer for specified PWM frequency with given period
-    let timer_clock_cfg = clock_cfg
-        .timer_clock_with_frequency(
-            config.period,
-            PwmWorkingMode::Increase,
-            Rate::from_khz(config.frequency_khz),
-        )
+    // Configure timer: 20kHz, 10-bit resolution (0-1023)
+    let mut timer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    timer0
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty10Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_khz(20),
+        })
         .unwrap();
-    mcpwm.timer0.start(timer_clock_cfg);
 
-    // Configure Operators and connect pins
-    mcpwm.operator0.set_timer(&mcpwm.timer0);
-    let (pin_r, pin_g) = mcpwm.operator0.with_pins(
-        pin_r,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-        pin_g,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-    );
+    // Leak the timer to get a 'static reference
+    // This is safe because we only initialize once and need it forever
+    let timer0: &'static _ = Box::leak(Box::new(timer0));
 
-    mcpwm.operator1.set_timer(&mcpwm.timer0);
-    let (pin_b, pin_cw) = mcpwm.operator1.with_pins(
-        pin_b,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-        pin_cw,
-        PwmPinConfig::UP_ACTIVE_HIGH,
-    );
+    // Configure all 5 channels
+    let mut ch_r = ledc.channel(channel::Number::Channel0, pin_r);
+    ch_r.configure(channel::config::Config {
+        timer: timer0,
+        duty_pct: 0,
+        drive_mode: esp_hal::gpio::DriveMode::PushPull,
+    })
+    .unwrap();
 
-    mcpwm.operator2.set_timer(&mcpwm.timer0);
-    let pin_ww = mcpwm
-        .operator2
-        .with_pin_a(pin_ww, PwmPinConfig::UP_ACTIVE_HIGH);
+    let mut ch_g = ledc.channel(channel::Number::Channel1, pin_g);
+    ch_g.configure(channel::config::Config {
+        timer: timer0,
+        duty_pct: 0,
+        drive_mode: esp_hal::gpio::DriveMode::PushPull,
+    })
+    .unwrap();
 
-    let pwm_pins = PwmPins {
-        pin_r,
-        pin_g,
-        pin_b,
-        pin_cw,
-        pin_ww,
-    };
+    let mut ch_b = ledc.channel(channel::Number::Channel2, pin_b);
+    ch_b.configure(channel::config::Config {
+        timer: timer0,
+        duty_pct: 0,
+        drive_mode: esp_hal::gpio::DriveMode::PushPull,
+    })
+    .unwrap();
 
-    defmt::info!("MCPWM initialized with period: {}", config.period);
+    let mut ch_cw = ledc.channel(channel::Number::Channel3, pin_cw);
+    ch_cw.configure(channel::config::Config {
+        timer: timer0,
+        duty_pct: 0,
+        drive_mode: esp_hal::gpio::DriveMode::PushPull,
+    })
+    .unwrap();
 
-    Ok((pwm_pins, config.period))
+    let mut ch_ww = ledc.channel(channel::Number::Channel4, pin_ww);
+    ch_ww.configure(channel::config::Config {
+        timer: timer0,
+        duty_pct: 0,
+        drive_mode: esp_hal::gpio::DriveMode::PushPull,
+    })
+    .unwrap();
+
+    defmt::info!("LEDC initialized: 20kHz, 10-bit resolution (0-1023)");
+
+    LedcChannels {
+        ch_r,
+        ch_g,
+        ch_b,
+        ch_cw,
+        ch_ww,
+    }
 }
 
 /// PWM update task - reads LED state from TARGET_STATE signal and updates PWM outputs
 /// Also handles identify sequences which take priority and run uninterrupted
 #[embassy_executor::task]
-pub async fn pwm_task(mut pwm_pins: PwmPins, period: u16) {
-    defmt::info!("PWM task started. FORCING 50% DUTY CYCLE FOR 10s...");
+pub async fn pwm_task(mut channels: LedcChannels) {
+    defmt::info!("PWM task started");
 
-    // 50% duty cycle math: period / 2
-    let test_val = period / 2;
+    let mut last_applied_state = LedPwmState::default();
 
-    // Force pins to toggle immediately
-    pwm_pins.pin_r.set_timestamp(test_val);
-    pwm_pins.pin_g.set_timestamp(test_val);
-    pwm_pins.pin_b.set_timestamp(test_val);
-    pwm_pins.pin_cw.set_timestamp(test_val);
-    pwm_pins.pin_ww.set_timestamp(test_val);
+    // Helper to apply a PWM state
+    // LEDC uses 10-bit resolution (0-1023), scale from 0-255
+    let apply_state = |channels: &mut LedcChannels, state: &LedPwmState| {
+        let scale = |val: u8| ((val as u32 * 1023) / 255) as u32;
+        channels.ch_r.set_duty_hw(scale(state.r));
+        channels.ch_g.set_duty_hw(scale(state.g));
+        channels.ch_b.set_duty_hw(scale(state.b));
+        channels.ch_cw.set_duty_hw(scale(state.cw));
+        channels.ch_ww.set_duty_hw(scale(state.ww));
+    };
 
-    // Wait 10 seconds to let you probe with the multimeter
-    Timer::after(Duration::from_secs(10)).await;
+    loop {
+        // Select over both signals to handle whichever arrives first
+        match select(IDENTIFY_SIGNAL.wait(), TARGET_STATE.wait("pwm")).await {
+            Either::First(time_seconds) => {
+                // Identify signal received
+                if time_seconds > 0 {
+                    defmt::info!("Identify sequence triggered for {} seconds", time_seconds);
 
-    defmt::info!("Diagnostic over. Entering normal loop.");
+                    // Save current state to restore later
+                    let saved_state = TARGET_STATE.peek();
 
-    // defmt::info!("PWM task started with period: {}", period);
+                    // RED phase (1 second)
+                    defmt::info!("Identify: RED");
+                    apply_state(
+                        &mut channels,
+                        &LedPwmState {
+                            r: 255,
+                            g: 0,
+                            b: 0,
+                            cw: 0,
+                            ww: 0,
+                        },
+                    );
+                    Timer::after(Duration::from_secs(1)).await;
 
-    // let mut last_applied_state = LedPwmState::default();
+                    // GREEN phase (1 second)
+                    defmt::info!("Identify: GREEN");
+                    apply_state(
+                        &mut channels,
+                        &LedPwmState {
+                            r: 0,
+                            g: 255,
+                            b: 0,
+                            cw: 0,
+                            ww: 0,
+                        },
+                    );
+                    Timer::after(Duration::from_secs(1)).await;
 
-    // // Helper to apply a PWM state
-    // let apply_state = |pins: &mut PwmPins, state: &LedPwmState| {
-    //     let scale = |val: u8| ((val as u32 * period as u32) / 255) as u16;
-    //     pins.pin_r.set_timestamp(scale(state.r));
-    //     pins.pin_g.set_timestamp(scale(state.g));
-    //     pins.pin_b.set_timestamp(scale(state.b));
-    //     pins.pin_cw.set_timestamp(scale(state.cw));
-    //     pins.pin_ww.set_timestamp(scale(state.ww));
-    // };
+                    // BLUE phase (1 second)
+                    defmt::info!("Identify: BLUE");
+                    apply_state(
+                        &mut channels,
+                        &LedPwmState {
+                            r: 0,
+                            g: 0,
+                            b: 255,
+                            cw: 0,
+                            ww: 0,
+                        },
+                    );
+                    Timer::after(Duration::from_secs(1)).await;
 
-    // loop {
-    //     // Check for identify signal first (higher priority)
-    //     if let Some(time_seconds) = IDENTIFY_SIGNAL.try_take() {
-    //         if time_seconds > 0 {
-    //             defmt::info!("Identify sequence triggered for {} seconds", time_seconds);
+                    defmt::info!("Identify sequence complete");
 
-    //             // Save current state to restore later
-    //             let saved_state = TARGET_STATE.peek();
+                    // Restore saved state if it existed
+                    if let Some(saved) = saved_state {
+                        defmt::info!("Restoring previous state: {:?}", saved.target);
+                        apply_state(&mut channels, &saved.target);
+                        last_applied_state = saved.target;
+                    } else {
+                        // No previous state, turn off
+                        defmt::info!("No previous state, turning off");
+                        apply_state(&mut channels, &LedPwmState::default());
+                        last_applied_state = LedPwmState::default();
+                    }
+                }
+            }
+            Either::Second(target) => {
+                // Target state received
+                defmt::info!(
+                    "PWM task received new target: {:?}, transition: {}ms",
+                    target.target,
+                    target.transition_duration_ms
+                );
 
-    //             // RED phase (1 second)
-    //             defmt::info!("Identify: RED");
-    //             apply_state(
-    //                 &mut pwm_pins,
-    //                 &LedPwmState {
-    //                     r: 255,
-    //                     g: 0,
-    //                     b: 0,
-    //                     cw: 0,
-    //                     ww: 0,
-    //                 },
-    //             );
-    //             Timer::after(Duration::from_secs(1)).await;
+                // For now, apply instantly (animation/interpolation will be added in task #12)
+                if target.target != last_applied_state {
+                    defmt::info!("Applying PWM state: {:?}", target.target);
+                    apply_state(&mut channels, &target.target);
+                    last_applied_state = target.target;
 
-    //             // GREEN phase (1 second)
-    //             defmt::info!("Identify: GREEN");
-    //             apply_state(
-    //                 &mut pwm_pins,
-    //                 &LedPwmState {
-    //                     r: 0,
-    //                     g: 255,
-    //                     b: 0,
-    //                     cw: 0,
-    //                     ww: 0,
-    //                 },
-    //             );
-    //             Timer::after(Duration::from_secs(1)).await;
-
-    //             // BLUE phase (1 second)
-    //             defmt::info!("Identify: BLUE");
-    //             apply_state(
-    //                 &mut pwm_pins,
-    //                 &LedPwmState {
-    //                     r: 0,
-    //                     g: 0,
-    //                     b: 255,
-    //                     cw: 0,
-    //                     ww: 0,
-    //                 },
-    //             );
-    //             Timer::after(Duration::from_secs(1)).await;
-
-    //             defmt::info!("Identify sequence complete");
-
-    //             // Restore saved state if it existed
-    //             if let Some(saved) = saved_state {
-    //                 defmt::info!("Restoring previous state: {:?}", saved.target);
-    //                 apply_state(&mut pwm_pins, &saved.target);
-    //                 last_applied_state = saved.target;
-    //             } else {
-    //                 // No previous state, turn off
-    //                 defmt::info!("No previous state, turning off");
-    //                 apply_state(&mut pwm_pins, &LedPwmState::default());
-    //                 last_applied_state = LedPwmState::default();
-    //             }
-
-    //             continue;
-    //         }
-    //     }
-
-    //     // Wait for a new target state
-    //     let target = TARGET_STATE.wait("pwm").await;
-
-    //     defmt::info!(
-    //         "PWM task received new target: {:?}, transition: {}ms",
-    //         target.target,
-    //         target.transition_duration_ms
-    //     );
-
-    //     // For now, apply instantly (animation/interpolation will be added in task #12)
-    //     if target.target != last_applied_state {
-    //         defmt::info!("Applying PWM state: {:?}", target.target);
-    //         apply_state(&mut pwm_pins, &target.target);
-    //         last_applied_state = target.target;
-
-    //         // Also update LED_STATE for backwards compatibility
-    //         *LED_STATE.lock().await = target.target;
-    //     }
-    // }
+                    // Also update LED_STATE for backwards compatibility
+                    *LED_STATE.lock().await = target.target;
+                }
+            }
+        }
+    }
 }

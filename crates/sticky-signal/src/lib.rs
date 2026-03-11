@@ -107,9 +107,12 @@ where
         self.state.lock(|cell| {
             let mut cell = cell.borrow_mut();
             for state in cell.waiters.iter_mut() {
+                defmt::info!("waking up waiter");
                 let old = core::mem::replace(state, (state.0, StateInner::Signaled));
                 if let (_, StateInner::Waiting(waker)) = old {
                     waker.wake();
+                } else {
+                    defmt::info!("no waker");
                 }
             }
             cell.value = Some(val);
