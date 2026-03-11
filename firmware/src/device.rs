@@ -31,18 +31,28 @@ impl OnOffHooks for LedDeviceLogic {
         defmt::info!("OnOff command received: {}", on);
         defmt::info!("Heap Stats: {}", esp_alloc::HEAP.stats());
 
-        // Update device state and compute PWM values
+        // Update device state
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.on = on;
-            let pwm_state = state.to_pwm_state();
-
             defmt::info!("Device state: {:?}", *state);
+        }
+
+        // Note: When coupled with LevelControlHandler, the level control cluster
+        // will handle smooth transitions using on_transition_time, off_transition_time,
+        // and on_off_transition_time attributes. The coupled handler will call
+        // set_device_level which updates the PWM via TARGET_STATE.
+        //
+        // If running standalone (not coupled), directly signal PWM with transition.
+        // This happens when level_control_handler.init(Some(&on_off_handler)) is not called.
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            let pwm_state = state.to_pwm_state();
             defmt::info!("PWM state: {:?}", pwm_state);
 
-            // Signal the PWM task with the new target state (instant transition)
+            // Default 400ms transition for standalone mode
+            // When coupled, LevelControl cluster handles transitions with configurable timing
             TARGET_STATE.signal(TargetState {
                 target: pwm_state,
-                transition_duration_ms: 0,
+                transition_duration_ms: 400,
             });
         }
 
@@ -110,6 +120,7 @@ impl LevelControlHooks for LedDeviceLogic {
 
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.brightness = level;
+            state.max_brightness_override = false; // Clear override on brightness change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Brightness updated: level={}, on={}", level, state.on);
@@ -167,5 +178,65 @@ impl ColorControlHooks for LedDeviceLogic {
             target: new_state,
             transition_duration_ms: 0,
         });
+    }
+}
+
+/// Max Brightness Switch Logic - controls the max_brightness_override flag
+#[derive(Default)]
+pub struct MaxBrightnessSwitch;
+
+impl MaxBrightnessSwitch {
+    /// Get current override state
+    fn get_current_override() -> bool {
+        if let Ok(state_guard) = DEVICE_STATE.try_lock() {
+            state_guard.max_brightness_override
+        } else {
+            false
+        }
+    }
+}
+
+impl OnOffHooks for MaxBrightnessSwitch {
+    const CLUSTER: Cluster<'static> = ON_OFF_FULL_CLUSTER;
+
+    fn on_off(&self) -> bool {
+        Self::get_current_override()
+    }
+
+    fn set_on_off(&self, on: bool) {
+        defmt::info!("Max Brightness Override: {}", on);
+
+        // Update device state override flag
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.max_brightness_override = on;
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Override state: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Signal the PWM task with smooth transition
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: 400,
+            });
+        }
+    }
+
+    fn start_up_on_off(&self) -> Nullable<on_off::StartUpOnOffEnum> {
+        Nullable::none()
+    }
+
+    fn set_start_up_on_off(
+        &self,
+        _value: Nullable<on_off::StartUpOnOffEnum>,
+    ) -> Result<(), MatterError> {
+        Ok(())
+    }
+
+    async fn handle_off_with_effect(
+        &self,
+        _effect: rs_matter::dm::clusters::on_off::EffectVariantEnum,
+    ) {
+        self.set_on_off(false);
     }
 }

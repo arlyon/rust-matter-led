@@ -43,9 +43,11 @@ use rs_matter_embassy::{
 
 use esp_metadata_generated::memory_range;
 use firmware::clusters::color_control::ColorControlHandler;
+use firmware::clusters::level_control::AttributeDefaults;
 use firmware::clusters::*;
-use firmware::device::LedDeviceLogic;
-use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
+use firmware::device::{LedDeviceLogic, MaxBrightnessSwitch};
+use firmware::matter::{LIGHT_ENDPOINT_ID, MAX_BRIGHTNESS_SWITCH_ID, NODE};
+use rs_matter::tlv::Nullable;
 
 // we can reclaim RAM from the bootloader!!!
 const RECLAIMED_RAM: usize =
@@ -168,8 +170,6 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(firmware::led::pwm::pwm_task(ledc_channels).unwrap());
     defmt::info!("PWM task spawned");
 
-    embassy_futures::yield_now().await;
-
     // Get MAC address for unique identity
     let mac = esp_hal::efuse::Efuse::mac_address();
     defmt::info!(
@@ -210,6 +210,19 @@ async fn main(spawner: Spawner) -> ! {
     let mut weak_rand = crypto.weak_rand().unwrap();
 
     // == Matter Device Definition (Using custom OnOff logic) ==
+
+    // Configure smooth transitions: 400ms (4 deciseconds) for on/off
+    // These can be changed via Matter/Home Assistant
+    let level_control_defaults = AttributeDefaults {
+        on_level: Nullable::none(),
+        options: level_control::OptionsBitmap::from_bits(0).unwrap(),
+        on_off_transition_time: 4,              // 400ms default for on/off
+        on_transition_time: Nullable::some(4),  // 400ms when turning on
+        off_transition_time: Nullable::some(4), // 400ms when turning off
+        default_move_rate: Nullable::none(),
+    };
+
+    // Create handlers (use new() instead of new_standalone() for proper coupling)
     let on_off_handler = OnOffHandler::new_standalone(
         Dataver::new_rand(&mut weak_rand),
         LIGHT_ENDPOINT_ID,
@@ -228,7 +241,14 @@ async fn main(spawner: Spawner) -> ! {
         Dataver::new_rand(&mut weak_rand),
         LIGHT_ENDPOINT_ID,
         LedDeviceLogic,
-        Default::default(),
+        level_control_defaults, // Use custom transition times
+    );
+
+    // Max brightness switch handler (Endpoint 2) - standalone since not coupled
+    let max_brightness_handler = OnOffHandler::new_standalone(
+        Dataver::new_rand(&mut weak_rand),
+        MAX_BRIGHTNESS_SWITCH_ID,
+        MaxBrightnessSwitch,
     );
 
     // TODO: figure this out, and use new instead of new_standalone
@@ -267,8 +287,24 @@ async fn main(spawner: Spawner) -> ! {
             level_control_handler.adapt(),
         )
         .chain(
-            // Add the mandatory Descriptor cluster
+            // Add the mandatory Descriptor cluster for Endpoint 1
             EpClMatcher::new(Some(LIGHT_ENDPOINT_ID), Some(desc::DescHandler::CLUSTER.id)),
+            MatterAsync(desc::DescHandler::new(Dataver::new_rand(&mut weak_rand)).adapt()),
+        )
+        .chain(
+            // Add OnOff cluster for Endpoint 2 (Max Brightness Switch)
+            EpClMatcher::new(
+                Some(MAX_BRIGHTNESS_SWITCH_ID),
+                Some(firmware::clusters::ON_OFF_FULL_CLUSTER.id),
+            ),
+            max_brightness_handler.adapt(),
+        )
+        .chain(
+            // Add the mandatory Descriptor cluster for Endpoint 2
+            EpClMatcher::new(
+                Some(MAX_BRIGHTNESS_SWITCH_ID),
+                Some(desc::DescHandler::CLUSTER.id),
+            ),
             MatterAsync(desc::DescHandler::new(Dataver::new_rand(&mut weak_rand)).adapt()),
         );
 

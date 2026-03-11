@@ -76,7 +76,7 @@ impl<H: IdentifyHooks> ClusterAsyncHandler for IdentifyHandler<'_, H> {
 
     async fn identify_time(
         &self,
-        ctx: impl rs_matter::dm::ReadContext,
+        _ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
         defmt::info!("identify_time read");
         Ok(self.identify_time.get())
@@ -84,7 +84,7 @@ impl<H: IdentifyHooks> ClusterAsyncHandler for IdentifyHandler<'_, H> {
 
     async fn identify_type(
         &self,
-        ctx: impl rs_matter::dm::ReadContext,
+        _ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<IdentifyTypeEnum, rs_matter::error::Error> {
         defmt::info!("identify_type read");
         Ok(IdentifyTypeEnum::LightOutput)
@@ -92,7 +92,7 @@ impl<H: IdentifyHooks> ClusterAsyncHandler for IdentifyHandler<'_, H> {
 
     async fn set_identify_time(
         &self,
-        ctx: impl rs_matter::dm::WriteContext,
+        _ctx: impl rs_matter::dm::WriteContext,
         value: u16,
     ) -> Result<(), rs_matter::error::Error> {
         defmt::info!("set_identify_time: {}", value);
@@ -102,7 +102,7 @@ impl<H: IdentifyHooks> ClusterAsyncHandler for IdentifyHandler<'_, H> {
 
     async fn handle_identify(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: IdentifyRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
         defmt::info!("handle_identify called");
@@ -114,8 +114,8 @@ impl<H: IdentifyHooks> ClusterAsyncHandler for IdentifyHandler<'_, H> {
 
     async fn handle_trigger_effect(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
-        request: TriggerEffectRequest<'_>,
+        _ctx: impl rs_matter::dm::InvokeContext,
+        _request: TriggerEffectRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
         defmt::info!("handle_trigger_effect called");
         Ok(())

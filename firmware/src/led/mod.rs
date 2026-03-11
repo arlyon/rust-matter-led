@@ -4,7 +4,7 @@ pub mod pwm;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_hal::gpio::Output;
-use palette::{FromColor, Hsv, Srgb, Xyz, white_point::D65};
+use palette::{FromColor, Hsv, Srgb};
 use sticky_signal::StickySignal;
 
 /// LED PWM state representing the current/target values for all channels
@@ -32,6 +32,8 @@ pub struct DeviceState {
     pub saturation: u8,
     /// Color mode (true = using color temp, false = using HSV)
     pub use_color_temp: bool,
+    /// Max brightness override - when true, all 5 channels drive at current brightness
+    pub max_brightness_override: bool,
 }
 
 impl Default for DeviceState {
@@ -42,7 +44,8 @@ impl Default for DeviceState {
             color_temp_mireds: 250, // ~4000K (neutral white)
             hue: 0,
             saturation: 0,
-            use_color_temp: true, // Default to white light mode
+            use_color_temp: true,           // Default to white light mode
+            max_brightness_override: false, // Default to normal mode
         }
     }
 }
@@ -88,6 +91,18 @@ impl DeviceState {
         }
 
         let brightness_scale = self.brightness as u32;
+
+        // Max brightness override mode - all channels at current brightness
+        if self.max_brightness_override {
+            let max_value = scale_brightness(255, brightness_scale);
+            return LedPwmState {
+                r: max_value,
+                g: max_value,
+                b: max_value,
+                cw: max_value,
+                ww: max_value,
+            };
+        }
 
         if self.use_color_temp {
             // Color temperature mode - use CW/WW channels
@@ -174,6 +189,7 @@ pub static DEVICE_STATE: Mutex<CriticalSectionRawMutex, DeviceState> = Mutex::ne
     hue: 0,
     saturation: 0,
     use_color_temp: true,
+    max_brightness_override: false,
 });
 
 /// Sticky signal for target LED state - PWM animation task waits on this

@@ -273,6 +273,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.hue = hue;
             state.use_color_temp = false; // Switch to HSV mode
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Hue updated: {:?}", *state);
@@ -331,6 +332,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.saturation = saturation;
             state.use_color_temp = false; // Switch to HSV mode
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Saturation updated: {:?}", *state);
@@ -393,6 +395,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
             state.hue = hue;
             state.saturation = saturation;
             state.use_color_temp = false; // Switch to HSV mode
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("HSV color updated: {:?}", *state);
@@ -460,6 +463,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.color_temp_mireds = color_temp;
             state.use_color_temp = true;
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Color temp updated: {:?}", *state);
@@ -501,6 +505,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         if let Ok(mut state) = DEVICE_STATE.try_lock() {
             state.hue = hue;
             state.use_color_temp = false; // Switch to HSV mode
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Enhanced hue updated: {:?}", *state);
@@ -564,6 +569,7 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
             state.hue = hue;
             state.saturation = saturation;
             state.use_color_temp = false; // Switch to HSV mode
+            state.max_brightness_override = false; // Clear override on color change
             let pwm_state = state.to_pwm_state();
 
             defmt::info!("Enhanced HSV updated: {:?}", *state);

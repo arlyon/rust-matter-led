@@ -1,9 +1,9 @@
 use super::{LED_STATE, LedPwmState, TARGET_STATE};
-use embassy_futures::select::{select, Either};
+use easer::functions::Easing;
+use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
-use easer::functions::Easing;
 use esp_hal::{
     ledc::{
         LowSpeed,
@@ -13,7 +13,7 @@ use esp_hal::{
     peripherals::LEDC,
     time::Rate,
 };
-use palette::{IntoColor, Srgb, Lab, Mix};
+use palette::{IntoColor, Mix, Oklab, Srgb};
 
 extern crate alloc;
 use alloc::boxed::Box;
@@ -45,15 +45,21 @@ pub fn init_ledc(
     let mut ledc = esp_hal::ledc::Ledc::new(ledc);
     ledc.set_global_slow_clock(esp_hal::ledc::LSGlobalClkSource::APBClk);
 
-    // Configure timer: 20kHz, 10-bit resolution (0-1023)
+    // NOTE: this is probably stable at 60fps, but might not be at 120/240fps
+    //       if that is the case, drop the duty (number of colours) to 13 bit
+    //       and double the frequency to 4882
     let mut timer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
-    timer0
-        .configure(timer::config::Config {
-            duty: timer::config::Duty::Duty10Bit,
-            clock_source: timer::LSClockSource::APBClk,
-            frequency: Rate::from_khz(20),
-        })
-        .unwrap();
+    match timer0.configure(timer::config::Config {
+        duty: timer::config::Duty::Duty13Bit,
+        clock_source: timer::LSClockSource::APBClk,
+        frequency: Rate::from_hz(4882),
+    }) {
+        Ok(()) => {}
+        Err(e) => {
+            defmt::error!("failed to register timer: {:?}", e);
+            panic!();
+        }
+    }
 
     // Leak the timer to get a 'static reference
     // This is safe because we only initialize once and need it forever
@@ -85,22 +91,24 @@ pub fn init_ledc(
     .unwrap();
 
     let mut ch_cw = ledc.channel(channel::Number::Channel3, pin_cw);
-    ch_cw.configure(channel::config::Config {
-        timer: timer0,
-        duty_pct: 0,
-        drive_mode: esp_hal::gpio::DriveMode::PushPull,
-    })
-    .unwrap();
+    ch_cw
+        .configure(channel::config::Config {
+            timer: timer0,
+            duty_pct: 0,
+            drive_mode: esp_hal::gpio::DriveMode::PushPull,
+        })
+        .unwrap();
 
     let mut ch_ww = ledc.channel(channel::Number::Channel4, pin_ww);
-    ch_ww.configure(channel::config::Config {
-        timer: timer0,
-        duty_pct: 0,
-        drive_mode: esp_hal::gpio::DriveMode::PushPull,
-    })
-    .unwrap();
+    ch_ww
+        .configure(channel::config::Config {
+            timer: timer0,
+            duty_pct: 0,
+            drive_mode: esp_hal::gpio::DriveMode::PushPull,
+        })
+        .unwrap();
 
-    defmt::info!("LEDC initialized: 20kHz, 10-bit resolution (0-1023)");
+    defmt::info!("LEDC initialized: 4kHz, 14-bit resolution (0-16383)");
 
     LedcChannels {
         ch_r,
@@ -120,13 +128,19 @@ pub async fn pwm_task(mut channels: LedcChannels) {
 
     let mut last_applied_state = LedPwmState::default();
 
-    // Helper to apply a PWM state with Gamma 2.0 correction
-    // Maps linear 8-bit (0-255) to human-eye corrected 10-bit (0-1023)
+    // Helper to apply a PWM state with Gamma 2.2 correction
+    // Maps linear 8-bit (0-255) to human-eye corrected 13-bit (0-8191)
     let apply_state = |channels: &mut LedcChannels, state: &LedPwmState| {
-        // Gamma 2.0 correction: (value^2 * 1023) / (255^2)
+        // Gamma 2.2 correction: (value/255)^2.2 * 8191
+
+        use palette::num::Powf;
+
         let scale = |val: u8| {
-            let v = val as u32;
-            (v * v * 1023) / 65025 // 65025 = 255^2
+            if val == 0 {
+                return 0;
+            }
+            let normalized = val as f32 / 255.0;
+            (normalized.powf(2.2) * 8191.0) as u32
         };
         channels.ch_r.set_duty_hw(scale(state.r));
         channels.ch_g.set_duty_hw(scale(state.g));
@@ -135,8 +149,8 @@ pub async fn pwm_task(mut channels: LedcChannels) {
         channels.ch_ww.set_duty_hw(scale(state.ww));
     };
 
-    // Helper to perceptually interpolate between two states using Lab color space
-    // RGB channels use Lab mixing for natural color transitions
+    // Helper to perceptually interpolate between two states using Oklab color space
+    // RGB channels use Oklab mixing for natural color transitions
     // CW/WW channels use linear interpolation (already perceptually mapped via mireds)
     let lerp_state = |start: &LedPwmState, end: &LedPwmState, t: f32| -> LedPwmState {
         // Simple linear interpolation for u8 values
@@ -149,7 +163,7 @@ pub async fn pwm_task(mut channels: LedcChannels) {
         let end_is_rgb = end.r != 0 || end.g != 0 || end.b != 0;
 
         let (r, g, b) = if start_is_rgb && end_is_rgb {
-            // Both states use RGB - interpolate in perceptual Lab color space
+            // Both states use RGB - interpolate in perceptual Oklab color space
             let start_rgb = Srgb::new(
                 start.r as f32 / 255.0,
                 start.g as f32 / 255.0,
@@ -161,15 +175,15 @@ pub async fn pwm_task(mut channels: LedcChannels) {
                 end.b as f32 / 255.0,
             );
 
-            // Convert to Lab color space for perceptual mixing
-            let start_lab: Lab = start_rgb.into_color();
-            let end_lab: Lab = end_rgb.into_color();
+            // Convert to Oklab color space for perceptual mixing
+            let start_oklab: Oklab = start_rgb.into_color();
+            let end_oklab: Oklab = end_rgb.into_color();
 
-            // Mix in Lab space
-            let mixed_lab = start_lab.mix(end_lab, t);
+            // Mix in Oklab space
+            let mixed_oklab = start_oklab.mix(end_oklab, t);
 
             // Convert back to sRGB
-            let mixed_rgb: Srgb = mixed_lab.into_color();
+            let mixed_rgb: Srgb = mixed_oklab.into_color();
 
             (
                 (mixed_rgb.red * 255.0).clamp(0.0, 255.0) as u8,
