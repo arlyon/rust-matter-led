@@ -1,6 +1,6 @@
 use crate::clusters::*;
 use crate::led::GLOBAL_LED_PIN;
-use crate::led::{LED_STATE, LedPwmState};
+use crate::led::{LED_STATE, LedPwmState, TARGET_STATE, TargetState};
 use rs_matter::dm::Cluster;
 use rs_matter::error::Error as MatterError;
 use rs_matter::tlv::Nullable;
@@ -45,15 +45,15 @@ impl OnOffHooks for LedDeviceLogic {
             LedPwmState::default()
         };
 
-        // Update the LED state
-        if let Ok(mut state_guard) = LED_STATE.try_lock() {
-            *state_guard = new_state;
-            defmt::info!("Set LED target state to: {:?}", new_state);
-        } else {
-            defmt::warn!("Could not acquire LED_STATE lock to set on/off");
-        }
+        defmt::info!("Set LED target state to: {:?}", new_state);
 
-        // Direct write to GPIO
+        // Signal the PWM task with the new target state (instant transition)
+        TARGET_STATE.signal(TargetState {
+            target: new_state,
+            transition_duration_ms: 0,
+        });
+
+        // Direct write to GPIO (legacy support)
         if let Ok(mut pin_guard) = GLOBAL_LED_PIN.try_lock() {
             if let Some(pin) = pin_guard.as_mut() {
                 if on {
@@ -61,11 +61,7 @@ impl OnOffHooks for LedDeviceLogic {
                 } else {
                     pin.set_low();
                 }
-            } else {
-                defmt::warn!("Could not acquire GLOBAL_LED_PIN lock");
             }
-        } else {
-            defmt::warn!("Could not acquire GLOBAL_LED_PIN lock");
         }
     }
 
@@ -93,18 +89,16 @@ impl OnOffHooks for LedDeviceLogic {
 }
 
 use crate::clusters::identify::IdentifyHooks;
+use crate::led::pwm::IDENTIFY_SIGNAL;
 
 impl IdentifyHooks for LedDeviceLogic {
     fn on_identify(&self, time: u16) {
         defmt::info!("Identify command received: {} seconds", time);
         if time > 0 {
-            // Blink the LED for identification
-            // Since we don't have a background task for this yet, we just log it
-            // Real implementation would likely start a blinking task or similar
-            // For now, let's just toggle it once if it's off
-            if !Self::get_current_on_off() {
-                self.set_on_off(true);
-            }
+            // Signal the PWM task to execute the R->G->B identify sequence
+            // The sequence will run uninterrupted for 3 seconds (1s per color)
+            IDENTIFY_SIGNAL.signal(time);
+            defmt::info!("Identify sequence triggered");
         }
     }
 }
@@ -149,12 +143,13 @@ impl ColorControlHooks for LedDeviceLogic {
         };
 
         let new_state = LedPwmState { r, g, b, cw, ww };
+        defmt::info!("Set LED color state to: {:?}", new_state);
 
-        // Update the LED state
-        if let Ok(mut state_guard) = LED_STATE.try_lock() {
-            *state_guard = new_state;
-            defmt::info!("Set LED color state to: {:?}", new_state);
-        }
+        // Signal the PWM task with the new target state (instant transition)
+        TARGET_STATE.signal(TargetState {
+            target: new_state,
+            transition_duration_ms: 0,
+        });
     }
 }
 

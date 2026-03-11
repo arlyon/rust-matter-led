@@ -21,7 +21,8 @@ use rs_matter_embassy::matter::dm::devices::test::{TEST_DEV_ATT, TEST_DEV_DET};
 use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
-    gpio::{Input, Io, Pull},
+    gpio::{Input, Io, Level, OutputConfig, Pull},
+    peripherals::SW_INTERRUPT,
     ram,
     rng::Rng,
     timer::timg::TimerGroup,
@@ -148,30 +149,64 @@ async fn main(spawner: Spawner) -> ! {
     }
 
     // Initialize Embassy Timer Driver
+    use esp_hal::interrupt::software::SoftwareInterruptControl;
     let timg0 = TimerGroup::new(peripherals.TIMG0);
-    let sw_interrupt =
-        esp_hal::interrupt::software::SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
+    let software_interrupt = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    esp_rtos::start(timg0.timer0, software_interrupt.software_interrupt0);
 
     defmt::info!("Embassy initialized!");
 
     // --- Smart LED Initialization ---
     // RGB CW WW PWM Initialization
-    // let pwm_config = PwmConfig::default();
-    // let (pwm_pins, period) = pwm::init_pwm(
-    //     peripherals.MCPWM0,
-    //     pwm_config,
-    //     peripherals.GPIO18, // R
-    //     peripherals.GPIO19, // G
-    //     peripherals.GPIO20, // B
-    //     peripherals.GPIO21, // CW
-    //     peripherals.GPIO22, // WW
-    // )
-    // .unwrap();
+    // GPIO mapping: 0->G, 1->R, 10->B, 2->WW, 3->CW
+    let pwm_config = PwmConfig::default();
+    let (mut pwm_pins, period) = pwm::init_pwm(
+        peripherals.MCPWM0,
+        pwm_config,
+        peripherals.GPIO1,  // R
+        peripherals.GPIO0,  // G
+        peripherals.GPIO10, // B
+        peripherals.GPIO3,  // CW
+        peripherals.GPIO2,  // WW
+    )
+    .unwrap();
 
-    // spawner.spawn(firmware::led::pwm::pwm_task(pwm_pins, period).unwrap());
+    defmt::info!("Initialized PWM LED Control, starting sine wave demo...");
 
-    // defmt::info!("Initialized PWM LED Control");
+    // Smooth RGB blending using sine waves
+    let mut phase: f32 = 0.0;
+    let phase_step: f32 = 0.02; // Speed of color transitions
+
+    // Turn off white channels
+    pwm_pins.pin_cw.set_timestamp(0);
+    pwm_pins.pin_ww.set_timestamp(0);
+
+    loop {
+        // Calculate RGB values using sine waves with 120 degree phase shifts
+        // This creates a smooth color wheel effect
+        let r_sine = libm::sinf(phase);
+        let g_sine = libm::sinf(phase + 2.0943951); // +120 degrees in radians
+        let b_sine = libm::sinf(phase + 4.1887902); // +240 degrees in radians
+
+        // Scale from [-1, 1] to [0, period]
+        let r_val = ((r_sine + 1.0) * 0.5 * period as f32) as u16;
+        let g_val = ((g_sine + 1.0) * 0.5 * period as f32) as u16;
+        let b_val = ((b_sine + 1.0) * 0.5 * period as f32) as u16;
+
+        // Update PWM channels
+        pwm_pins.pin_r.set_timestamp(r_val);
+        pwm_pins.pin_g.set_timestamp(g_val);
+        pwm_pins.pin_b.set_timestamp(b_val);
+
+        // Advance phase
+        phase += phase_step;
+        if phase > 6.2831853 { // 2*PI
+            phase -= 6.2831853;
+        }
+
+        // Small delay to control update rate (~50Hz)
+        embassy_time::Timer::after(embassy_time::Duration::from_millis(20)).await;
+    }
 
     // ADD THIS: A small "settling" delay
     defmt::info!("Radio controller init successful. Settling...");

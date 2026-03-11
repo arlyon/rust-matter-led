@@ -109,6 +109,13 @@ esp-hal-smartled = { version = "0.17.0", features = ["defmt", "esp32c6"] }
 smart-leds = "0.4.0"
 esp-metadata-generated = { version = "0.3.0", features = ["esp32c6"] }
 
+# Animation and color mixing dependencies
+palette = { version = "0.7", default-features = false, features = ["libm", "approx"] }
+easer = { version = "0.3", default-features = false, features = ["libm"] }
+libm = "0.2"
+sticky-signal = { path = "../crates/sticky-signal" }
+embassy-futures = "0.1.2"
+
 [dev-dependencies]
 embedded-test = { version = "0.7.0-alpha.3", git = "https://github.com/probe-rs/embedded-test", branch = "next", features = [
   "defmt",

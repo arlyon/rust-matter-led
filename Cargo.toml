@@ -1,8 +1,13 @@
 [workspace]
 members = [
-"firmware"
+"firmware",
+"crates/*"
 ]
 resolver = "3"
+
+[workspace.dependencies]
+defmt = "1.0.1"
+embassy-sync = { version = "0.7.2", features = ["defmt"] }
 
 [profile.dev]
 # Rust debug is too slow.

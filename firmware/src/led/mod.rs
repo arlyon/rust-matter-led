@@ -4,6 +4,7 @@ pub mod pwm;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_hal::gpio::Output;
+use sticky_signal::StickySignal;
 
 /// LED PWM state representing the current/target values for all channels
 #[derive(Clone, Copy, Debug, defmt::Format, PartialEq)]
@@ -13,6 +14,15 @@ pub struct LedPwmState {
     pub b: u8,
     pub cw: u8,
     pub ww: u8,
+}
+
+/// Target state for LED animation, includes both the target PWM values and transition duration
+#[derive(Clone, Copy, Debug, defmt::Format)]
+pub struct TargetState {
+    /// Target PWM state to reach
+    pub target: LedPwmState,
+    /// Transition duration in milliseconds (0 = instant)
+    pub transition_duration_ms: u32,
 }
 
 impl Default for LedPwmState {
@@ -38,8 +48,13 @@ impl LedPwmState {
     }
 }
 
-/// Global LED state shared between Matter handlers and PWM task
+/// Global LED state shared between Matter handlers and PWM task (deprecated, use TARGET_STATE)
 pub static LED_STATE: Mutex<CriticalSectionRawMutex, LedPwmState> = Mutex::new(LedPwmState::new());
+
+/// Sticky signal for target LED state - PWM animation task waits on this
+/// Supports up to 5 concurrent waiters (persistence task, PWM task, etc.)
+pub static TARGET_STATE: StickySignal<CriticalSectionRawMutex, TargetState, 5> =
+    StickySignal::new_with_name("led_target");
 
 /// Global pointer to the LED Output pin.
 /// This allows `device.rs` (logic) to control the LED directly.
