@@ -22,9 +22,15 @@ use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
     gpio::{Input, Io, Level, OutputConfig, Pull},
+    ledc::{
+        Ledc, LowSpeed,
+        channel::{self, ChannelHW, ChannelIFace},
+        timer::{self, TimerIFace},
+    },
     peripherals::SW_INTERRUPT,
     ram,
     rng::Rng,
+    time::Rate,
     timer::timg::TimerGroup,
 };
 
@@ -46,7 +52,6 @@ use esp_metadata_generated::memory_range;
 use firmware::clusters::color_control::ColorControlHandler;
 use firmware::clusters::*;
 use firmware::device::LedDeviceLogic;
-use firmware::led::pwm::{self, PwmConfig};
 use firmware::matter::{LIGHT_ENDPOINT_ID, NODE};
 
 // we can reclaim RAM from the bootloader!!!
@@ -156,56 +161,48 @@ async fn main(spawner: Spawner) -> ! {
 
     defmt::info!("Embassy initialized!");
 
-    // --- Smart LED Initialization ---
-    // RGB CW WW PWM Initialization
-    // GPIO mapping: 0->G, 1->R, 10->B, 2->WW, 3->CW
-    let pwm_config = PwmConfig::default();
-    let (mut pwm_pins, period) = pwm::init_pwm(
-        peripherals.MCPWM0,
-        pwm_config,
-        peripherals.GPIO1,  // R
-        peripherals.GPIO0,  // G
-        peripherals.GPIO10, // B
-        peripherals.GPIO3,  // CW
-        peripherals.GPIO2,  // WW
-    )
-    .unwrap();
+    // --- LEDC PWM Validation ---
+    // Initialize LEDC peripheral for basic hardware validation
+    // Red channel only (GPIO 1) with manual duty cycle stepping
+    defmt::info!("Initializing LEDC peripheral for Red channel validation...");
 
-    defmt::info!("Initialized PWM LED Control, starting sine wave demo...");
+    let mut ledc = Ledc::new(peripherals.LEDC);
+    ledc.set_global_slow_clock(esp_hal::ledc::LSGlobalClkSource::APBClk);
 
-    // Smooth RGB blending using sine waves
-    let mut phase: f32 = 0.0;
-    let phase_step: f32 = 0.02; // Speed of color transitions
+    let mut timer0 = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+    timer0
+        .configure(timer::config::Config {
+            duty: timer::config::Duty::Duty10Bit,
+            clock_source: timer::LSClockSource::APBClk,
+            frequency: Rate::from_khz(20),
+        })
+        .unwrap();
 
-    // Turn off white channels
-    pwm_pins.pin_cw.set_timestamp(0);
-    pwm_pins.pin_ww.set_timestamp(0);
+    let mut red_channel = ledc.channel(channel::Number::Channel0, peripherals.GPIO1);
+    red_channel
+        .configure(channel::config::Config {
+            timer: &timer0,
+            duty_pct: 0,
+            drive_mode: esp_hal::gpio::DriveMode::PushPull,
+        })
+        .unwrap();
+
+    defmt::info!("LEDC initialized: 20kHz, 10-bit resolution (0-1023)");
+    defmt::info!("Starting duty cycle validation sequence...");
+
+    let steps = [0, 337, 675, 1023, 675, 337];
 
     loop {
-        // Calculate RGB values using sine waves with 120 degree phase shifts
-        // This creates a smooth color wheel effect
-        let r_sine = libm::sinf(phase);
-        let g_sine = libm::sinf(phase + 2.0943951); // +120 degrees in radians
-        let b_sine = libm::sinf(phase + 4.1887902); // +240 degrees in radians
+        for duty in steps {
+            let percent = (duty as u32 * 100) / 1023;
+            defmt::info!("Setting Red Duty: {} (~{}%)", duty, percent);
+            red_channel.set_duty_hw(duty);
 
-        // Scale from [-1, 1] to [0, period]
-        let r_val = ((r_sine + 1.0) * 0.5 * period as f32) as u16;
-        let g_val = ((g_sine + 1.0) * 0.5 * period as f32) as u16;
-        let b_val = ((b_sine + 1.0) * 0.5 * period as f32) as u16;
+            let delay_start = embassy_time::Instant::now();
+            while delay_start.elapsed() < embassy_time::Duration::from_millis(500) {}
 
-        // Update PWM channels
-        pwm_pins.pin_r.set_timestamp(r_val);
-        pwm_pins.pin_g.set_timestamp(g_val);
-        pwm_pins.pin_b.set_timestamp(b_val);
-
-        // Advance phase
-        phase += phase_step;
-        if phase > 6.2831853 { // 2*PI
-            phase -= 6.2831853;
+            // embassy_time::Timer::after(embassy_time::Duration::from_millis(1000)).await;
         }
-
-        // Small delay to control update rate (~50Hz)
-        embassy_time::Timer::after(embassy_time::Duration::from_millis(20)).await;
     }
 
     // ADD THIS: A small "settling" delay
