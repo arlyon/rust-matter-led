@@ -13,6 +13,7 @@ use esp_hal::{
     peripherals::LEDC,
     time::Rate,
 };
+use palette::{IntoColor, Srgb, Lab, Mix};
 
 extern crate alloc;
 use alloc::boxed::Box;
@@ -134,18 +135,78 @@ pub async fn pwm_task(mut channels: LedcChannels) {
         channels.ch_ww.set_duty_hw(scale(state.ww));
     };
 
-    // Helper to linearly interpolate between two states based on progress (0.0 to 1.0)
+    // Helper to perceptually interpolate between two states using Lab color space
+    // RGB channels use Lab mixing for natural color transitions
+    // CW/WW channels use linear interpolation (already perceptually mapped via mireds)
     let lerp_state = |start: &LedPwmState, end: &LedPwmState, t: f32| -> LedPwmState {
+        // Simple linear interpolation for u8 values
         let lerp_u8 = |a: u8, b: u8, t: f32| -> u8 {
             (a as f32 + (b as f32 - a as f32) * t).clamp(0.0, 255.0) as u8
         };
-        LedPwmState {
-            r: lerp_u8(start.r, end.r, t),
-            g: lerp_u8(start.g, end.g, t),
-            b: lerp_u8(start.b, end.b, t),
-            cw: lerp_u8(start.cw, end.cw, t),
-            ww: lerp_u8(start.ww, end.ww, t),
-        }
+
+        // Detect if we're using RGB or CW/WW mode
+        let start_is_rgb = start.r != 0 || start.g != 0 || start.b != 0;
+        let end_is_rgb = end.r != 0 || end.g != 0 || end.b != 0;
+
+        let (r, g, b) = if start_is_rgb && end_is_rgb {
+            // Both states use RGB - interpolate in perceptual Lab color space
+            let start_rgb = Srgb::new(
+                start.r as f32 / 255.0,
+                start.g as f32 / 255.0,
+                start.b as f32 / 255.0,
+            );
+            let end_rgb = Srgb::new(
+                end.r as f32 / 255.0,
+                end.g as f32 / 255.0,
+                end.b as f32 / 255.0,
+            );
+
+            // Convert to Lab color space for perceptual mixing
+            let start_lab: Lab = start_rgb.into_color();
+            let end_lab: Lab = end_rgb.into_color();
+
+            // Mix in Lab space
+            let mixed_lab = start_lab.mix(end_lab, t);
+
+            // Convert back to sRGB
+            let mixed_rgb: Srgb = mixed_lab.into_color();
+
+            (
+                (mixed_rgb.red * 255.0).clamp(0.0, 255.0) as u8,
+                (mixed_rgb.green * 255.0).clamp(0.0, 255.0) as u8,
+                (mixed_rgb.blue * 255.0).clamp(0.0, 255.0) as u8,
+            )
+        } else if start_is_rgb && !end_is_rgb {
+            // Transitioning from RGB to CW/WW - fade out RGB
+            (
+                lerp_u8(start.r, 0, t),
+                lerp_u8(start.g, 0, t),
+                lerp_u8(start.b, 0, t),
+            )
+        } else if !start_is_rgb && end_is_rgb {
+            // Transitioning from CW/WW to RGB - fade in RGB
+            (
+                lerp_u8(0, end.r, t),
+                lerp_u8(0, end.g, t),
+                lerp_u8(0, end.b, t),
+            )
+        } else {
+            // Neither uses RGB
+            (0, 0, 0)
+        };
+
+        let (cw, ww) = if (!start_is_rgb && !end_is_rgb) || (start_is_rgb && end_is_rgb) {
+            // Both use same mode - normal interpolation
+            (lerp_u8(start.cw, end.cw, t), lerp_u8(start.ww, end.ww, t))
+        } else if !start_is_rgb && end_is_rgb {
+            // Transitioning from CW/WW to RGB - fade out CW/WW
+            (lerp_u8(start.cw, 0, t), lerp_u8(start.ww, 0, t))
+        } else {
+            // Transitioning from RGB to CW/WW - fade in CW/WW
+            (lerp_u8(0, end.cw, t), lerp_u8(0, end.ww, t))
+        };
+
+        LedPwmState { r, g, b, cw, ww }
     };
 
     loop {

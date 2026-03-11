@@ -22,7 +22,6 @@ use embassy_executor::Spawner;
 use esp_hal::{
     clock::CpuClock,
     gpio::{Input, Io, Pull},
-    peripherals::SW_INTERRUPT,
     ram,
     rng::Rng,
     timer::timg::TimerGroup,
