@@ -1,6 +1,6 @@
 use crate::clusters::*;
 use crate::led::GLOBAL_LED_PIN;
-use crate::led::{LED_STATE, LedPwmState, TARGET_STATE, TargetState};
+use crate::led::{DEVICE_STATE, LedPwmState, TARGET_STATE, TargetState};
 use rs_matter::dm::Cluster;
 use rs_matter::error::Error as MatterError;
 use rs_matter::tlv::Nullable;
@@ -10,11 +10,10 @@ use rs_matter::tlv::Nullable;
 pub struct LedDeviceLogic;
 
 impl LedDeviceLogic {
-    /// Get current on/off state by checking if any LED channel is active
+    /// Get current on/off state from device state
     fn get_current_on_off() -> bool {
-        // We need to check this synchronously, so we use try_lock
-        if let Ok(state_guard) = LED_STATE.try_lock() {
-            state_guard.is_on()
+        if let Ok(state_guard) = DEVICE_STATE.try_lock() {
+            state_guard.on
         } else {
             false // Default to off if we can't get the lock
         }
@@ -32,26 +31,20 @@ impl OnOffHooks for LedDeviceLogic {
         defmt::info!("OnOff command received: {}", on);
         defmt::info!("Heap Stats: {}", esp_alloc::HEAP.stats());
 
-        let new_state = if on {
-            // Define ON state (RED at 100% to match example)
-            LedPwmState {
-                r: 255,
-                g: 0,
-                b: 0,
-                cw: 0,
-                ww: 0,
-            }
-        } else {
-            LedPwmState::default()
-        };
+        // Update device state and compute PWM values
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.on = on;
+            let pwm_state = state.to_pwm_state();
 
-        defmt::info!("Set LED target state to: {:?}", new_state);
+            defmt::info!("Device state: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
 
-        // Signal the PWM task with the new target state (instant transition)
-        TARGET_STATE.signal(TargetState {
-            target: new_state,
-            transition_duration_ms: 0,
-        });
+            // Signal the PWM task with the new target state (instant transition)
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: 0,
+            });
+        }
 
         // Direct write to GPIO (legacy support)
         if let Ok(mut pin_guard) = GLOBAL_LED_PIN.try_lock() {
@@ -113,16 +106,40 @@ impl LevelControlHooks for LedDeviceLogic {
     const CLUSTER: Cluster<'static> = LEVEL_CONTROL_FULL_CLUSTER;
 
     fn set_device_level(&self, level: u8) -> Result<Option<u8>, ()> {
-        defmt::info!("device level set to {}", level);
-        Ok(Some(level))
+        defmt::info!("Device level set to {}", level);
+
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.brightness = level;
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Brightness updated: level={}, on={}", level, state.on);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Signal the PWM task with the new target state
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: 0,
+            });
+
+            Ok(Some(level))
+        } else {
+            Err(())
+        }
     }
 
     fn current_level(&self) -> Option<u8> {
-        return Some(0);
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            Some(state.brightness)
+        } else {
+            Some(0)
+        }
     }
 
     fn set_current_level(&self, level: Option<u8>) {
-        defmt::info!("level set to {}", level.unwrap());
+        if let Some(lvl) = level {
+            defmt::info!("Current level set to {}", lvl);
+            let _ = self.set_device_level(lvl);
+        }
     }
 }
 
@@ -184,8 +201,8 @@ fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
 }
 
 fn mireds_to_cwww(mireds: u16) -> (u8, u8) {
-    // Range 153 (Cool) to 500 (Warm)
-    const MIN_MIREDS: u16 = 153;
+    // Range 154 (Cool) to 500 (Warm)
+    const MIN_MIREDS: u16 = 154;
     const MAX_MIREDS: u16 = 500;
 
     let m = mireds.clamp(MIN_MIREDS, MAX_MIREDS);

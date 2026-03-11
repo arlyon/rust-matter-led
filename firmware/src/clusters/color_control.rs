@@ -1,3 +1,4 @@
+use crate::led::{DEVICE_STATE, TARGET_STATE, TargetState};
 use core::cell::Cell;
 use rs_matter::{
     dm::{Access, Cluster, Dataver, HandlerContext, Quality},
@@ -186,7 +187,15 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<ColorModeEnum, rs_matter::error::Error> {
         defmt::info!("color_mode read");
-        Ok(ColorModeEnum::CurrentHueAndCurrentSaturation)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            if state.use_color_temp {
+                Ok(ColorModeEnum::ColorTemperatureMireds)
+            } else {
+                Ok(ColorModeEnum::CurrentHueAndCurrentSaturation)
+            }
+        } else {
+            Ok(ColorModeEnum::ColorTemperatureMireds)
+        }
     }
 
     async fn options(
@@ -210,7 +219,15 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<EnhancedColorModeEnum, rs_matter::error::Error> {
         defmt::info!("enhanced_color_mode read");
-        Ok(EnhancedColorModeEnum::EnhancedCurrentHueAndCurrentSaturation)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            if state.use_color_temp {
+                Ok(EnhancedColorModeEnum::ColorTemperatureMireds)
+            } else {
+                Ok(EnhancedColorModeEnum::EnhancedCurrentHueAndCurrentSaturation)
+            }
+        } else {
+            Ok(EnhancedColorModeEnum::ColorTemperatureMireds)
+        }
     }
 
     async fn color_capabilities(
@@ -234,10 +251,41 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
 
     async fn handle_move_to_hue(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: MoveToHueRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_move_to_hue called");
+        let hue = request.hue()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_move_to_hue: hue={}, transition={}",
+            hue,
+            transition_time
+        );
+
+        // Update internal state
+        self.hue.set(hue);
+
+        // Update device state and switch to HSV mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.hue = hue;
+            state.use_color_temp = false; // Switch to HSV mode
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Hue updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
@@ -261,10 +309,41 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
 
     async fn handle_move_to_saturation(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: MoveToSaturationRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_move_to_saturation called");
+        let saturation = request.saturation()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_move_to_saturation: sat={}, transition={}",
+            saturation,
+            transition_time
+        );
+
+        // Update internal state
+        self.saturation.set(saturation);
+
+        // Update device state and switch to HSV mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.saturation = saturation;
+            state.use_color_temp = false; // Switch to HSV mode
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Saturation updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
@@ -288,10 +367,45 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
 
     async fn handle_move_to_hue_and_saturation(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: MoveToHueAndSaturationRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_move_to_hue_and_saturation called");
+        let hue = request.hue()?;
+        let saturation = request.saturation()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_move_to_hue_and_saturation: hue={}, sat={}, transition={}",
+            hue,
+            saturation,
+            transition_time
+        );
+
+        // Update internal state
+        self.hue.set(hue);
+        self.saturation.set(saturation);
+
+        // Update device state and switch to HSV mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.hue = hue;
+            state.saturation = saturation;
+            state.use_color_temp = false; // Switch to HSV mode
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("HSV color updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
@@ -324,19 +438,82 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
 
     async fn handle_move_to_color_temperature(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: MoveToColorTemperatureRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_move_to_color_temperature called");
+        let color_temp = request.color_temperature_mireds()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_move_to_color_temperature: temp={} mireds, transition={}",
+            color_temp,
+            transition_time
+        );
+
+        // Update internal state
+        self.temp.set(color_temp);
+
+        // Update device state and switch to color temp mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.color_temp_mireds = color_temp;
+            state.use_color_temp = true;
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Color temp updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
     async fn handle_enhanced_move_to_hue(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: EnhancedMoveToHueRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_enhanced_move_to_hue called");
+        let enhanced_hue = request.enhanced_hue()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_enhanced_move_to_hue: enhanced_hue={}, transition={}",
+            enhanced_hue,
+            transition_time
+        );
+
+        // Convert enhanced hue (16-bit) to regular hue (8-bit)
+        let hue = (enhanced_hue / 256) as u8;
+        self.hue.set(hue);
+
+        // Update device state and switch to HSV mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.hue = hue;
+            state.use_color_temp = false; // Switch to HSV mode
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Enhanced hue updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
@@ -360,10 +537,46 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
 
     async fn handle_enhanced_move_to_hue_and_saturation(
         &self,
-        ctx: impl rs_matter::dm::InvokeContext,
+        _ctx: impl rs_matter::dm::InvokeContext,
         request: EnhancedMoveToHueAndSaturationRequest<'_>,
     ) -> Result<(), rs_matter::error::Error> {
-        defmt::info!("handle_enhanced_move_to_hue_and_saturation called");
+        let enhanced_hue = request.enhanced_hue()?;
+        let saturation = request.saturation()?;
+        let transition_time = request.transition_time()?;
+
+        defmt::info!(
+            "handle_enhanced_move_to_hue_and_saturation: enhanced_hue={}, sat={}, transition={}",
+            enhanced_hue,
+            saturation,
+            transition_time
+        );
+
+        // Convert enhanced hue (16-bit) to regular hue (8-bit)
+        let hue = (enhanced_hue / 256) as u8;
+        self.hue.set(hue);
+        self.saturation.set(saturation);
+
+        // Update device state and switch to HSV mode
+        if let Ok(mut state) = DEVICE_STATE.try_lock() {
+            state.hue = hue;
+            state.saturation = saturation;
+            state.use_color_temp = false; // Switch to HSV mode
+            let pwm_state = state.to_pwm_state();
+
+            defmt::info!("Enhanced HSV updated: {:?}", *state);
+            defmt::info!("PWM state: {:?}", pwm_state);
+
+            // Convert transition time (1/10ths of a second) to milliseconds
+            let transition_ms = (transition_time as u32) * 100;
+
+            // Signal the PWM task
+            TARGET_STATE.signal(TargetState {
+                target: pwm_state,
+                transition_duration_ms: transition_ms,
+            });
+        }
+
+        self.dataver_changed();
         Ok(())
     }
 
@@ -407,42 +620,60 @@ impl<H: ColorControlHooks> ClusterAsyncHandler for ColorControlHandler<'_, H> {
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u8, rs_matter::error::Error> {
-        Ok(0)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            Ok(state.hue)
+        } else {
+            Ok(0)
+        }
     }
 
     async fn current_saturation(
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u8, rs_matter::error::Error> {
-        Ok(0)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            Ok(state.saturation)
+        } else {
+            Ok(0)
+        }
     }
 
     async fn color_temperature_mireds(
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
-        Ok(200)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            Ok(state.color_temp_mireds)
+        } else {
+            Ok(250) // Default 4000K if we can't read state
+        }
     }
 
     async fn enhanced_current_hue(
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
-        Ok(0)
+        if let Ok(state) = DEVICE_STATE.try_lock() {
+            // Enhanced hue is 16-bit, regular hue is 8-bit
+            // Scale up: enhanced_hue = hue * 256 / 254 * 254 = hue * 256
+            Ok((state.hue as u16) * 256)
+        } else {
+            Ok(0)
+        }
     }
 
     async fn color_temp_physical_min_mireds(
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
-        Ok(150)
+        Ok(154) // 6500K
     }
 
     async fn color_temp_physical_max_mireds(
         &self,
         ctx: impl rs_matter::dm::ReadContext,
     ) -> Result<u16, rs_matter::error::Error> {
-        Ok(500)
+        Ok(500) // 2000K
     }
 
     async fn start_up_color_temperature_mireds(

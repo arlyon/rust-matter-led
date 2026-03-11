@@ -2,7 +2,8 @@ use super::{LED_STATE, LedPwmState, TARGET_STATE};
 use embassy_futures::select::{select, Either};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
+use easer::functions::Easing;
 use esp_hal::{
     ledc::{
         LowSpeed,
@@ -111,21 +112,40 @@ pub fn init_ledc(
 
 /// PWM update task - reads LED state from TARGET_STATE signal and updates PWM outputs
 /// Also handles identify sequences which take priority and run uninterrupted
+/// Supports smooth transitions with gamma correction and ease-in-out curves
 #[embassy_executor::task]
 pub async fn pwm_task(mut channels: LedcChannels) {
     defmt::info!("PWM task started");
 
     let mut last_applied_state = LedPwmState::default();
 
-    // Helper to apply a PWM state
-    // LEDC uses 10-bit resolution (0-1023), scale from 0-255
+    // Helper to apply a PWM state with Gamma 2.0 correction
+    // Maps linear 8-bit (0-255) to human-eye corrected 10-bit (0-1023)
     let apply_state = |channels: &mut LedcChannels, state: &LedPwmState| {
-        let scale = |val: u8| ((val as u32 * 1023) / 255) as u32;
+        // Gamma 2.0 correction: (value^2 * 1023) / (255^2)
+        let scale = |val: u8| {
+            let v = val as u32;
+            (v * v * 1023) / 65025 // 65025 = 255^2
+        };
         channels.ch_r.set_duty_hw(scale(state.r));
         channels.ch_g.set_duty_hw(scale(state.g));
         channels.ch_b.set_duty_hw(scale(state.b));
         channels.ch_cw.set_duty_hw(scale(state.cw));
         channels.ch_ww.set_duty_hw(scale(state.ww));
+    };
+
+    // Helper to linearly interpolate between two states based on progress (0.0 to 1.0)
+    let lerp_state = |start: &LedPwmState, end: &LedPwmState, t: f32| -> LedPwmState {
+        let lerp_u8 = |a: u8, b: u8, t: f32| -> u8 {
+            (a as f32 + (b as f32 - a as f32) * t).clamp(0.0, 255.0) as u8
+        };
+        LedPwmState {
+            r: lerp_u8(start.r, end.r, t),
+            g: lerp_u8(start.g, end.g, t),
+            b: lerp_u8(start.b, end.b, t),
+            cw: lerp_u8(start.cw, end.cw, t),
+            ww: lerp_u8(start.ww, end.ww, t),
+        }
     };
 
     loop {
@@ -204,14 +224,58 @@ pub async fn pwm_task(mut channels: LedcChannels) {
                     target.transition_duration_ms
                 );
 
-                // For now, apply instantly (animation/interpolation will be added in task #12)
-                if target.target != last_applied_state {
-                    defmt::info!("Applying PWM state: {:?}", target.target);
-                    apply_state(&mut channels, &target.target);
-                    last_applied_state = target.target;
+                let start_state = last_applied_state;
+                let end_state = target.target;
+                let duration_ms = target.transition_duration_ms;
 
-                    // Also update LED_STATE for backwards compatibility
-                    *LED_STATE.lock().await = target.target;
+                // Handle instant transitions (0ms duration)
+                if duration_ms == 0 {
+                    defmt::info!("Instant transition to: {:?}", end_state);
+                    apply_state(&mut channels, &end_state);
+                    last_applied_state = end_state;
+                    *LED_STATE.lock().await = end_state;
+                    continue;
+                }
+
+                // Smooth transition with 50Hz update rate (20ms per frame)
+                defmt::info!(
+                    "Starting smooth transition from {:?} to {:?} over {}ms",
+                    start_state,
+                    end_state,
+                    duration_ms
+                );
+
+                let start_time = Instant::now();
+                let duration = Duration::from_millis(duration_ms as u64);
+                const FRAME_TIME: Duration = Duration::from_millis(20); // 50Hz
+
+                loop {
+                    let elapsed = start_time.elapsed();
+
+                    // Check if transition is complete
+                    if elapsed >= duration {
+                        // Apply final state
+                        apply_state(&mut channels, &end_state);
+                        last_applied_state = end_state;
+                        *LED_STATE.lock().await = end_state;
+                        defmt::info!("Transition complete");
+                        break;
+                    }
+
+                    // Calculate linear progress (0.0 to 1.0)
+                    let progress = elapsed.as_millis() as f32 / duration_ms as f32;
+
+                    // Apply cubic ease-in-out for smooth acceleration/deceleration
+                    let eased = easer::functions::Cubic::ease_in_out(progress, 0.0, 1.0, 1.0);
+
+                    // Interpolate state
+                    let current_state = lerp_state(&start_state, &end_state, eased);
+
+                    // Apply to hardware
+                    apply_state(&mut channels, &current_state);
+
+                    // Wait for next frame
+                    Timer::after(FRAME_TIME).await;
                 }
             }
         }
