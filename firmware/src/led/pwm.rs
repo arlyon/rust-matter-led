@@ -108,7 +108,7 @@ pub fn init_ledc(
         })
         .unwrap();
 
-    defmt::info!("LEDC initialized: 4kHz, 14-bit resolution (0-16383)");
+    defmt::info!("LEDC initialized: 4.8kHz, 13-bit resolution (0-8192)");
 
     LedcChannels {
         ch_r,

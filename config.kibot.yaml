@@ -119,6 +119,10 @@ outputs:
         - Footprint
         - field: "LCSC"
           name: "LCSC Part Number"
+        - field: "MPN"
+          name: "MPN"
+        - field: Description
+          name: "Description"
       csv:
         hide_pcb_info: true
         hide_stats_info: true
